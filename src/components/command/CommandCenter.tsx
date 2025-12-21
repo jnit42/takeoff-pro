@@ -149,6 +149,19 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
     }
   }, [messages]);
 
+  // Count actual items in pending actions (handles takeoff.add_multiple)
+  const getPendingItemCount = (actions: ParsedAction[]): number => {
+    let count = 0;
+    for (const action of actions) {
+      if (action.type === 'takeoff.add_multiple' && action.params.items) {
+        count += (action.params.items as unknown[]).length;
+      } else {
+        count += 1;
+      }
+    }
+    return count;
+  };
+
   const addMessage = (role: 'user' | 'system' | 'preview' | 'suggestion', content: string, extra?: Partial<Message>) => {
     const newMessage: Message = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -534,32 +547,41 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
               </div>
             </ScrollArea>
 
-            {/* Pending actions indicator - prominent but clean */}
+            {/* Pending actions indicator - shows actual item count */}
             {pendingActions && (
-              <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-400 dark:border-amber-600 shadow-sm">
-                <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                <span className="flex-1 text-amber-800 dark:text-amber-200 font-medium">
-                  {pendingActions.length} item{pendingActions.length > 1 ? 's' : ''} pending • Say "confirm" or keep refining
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleConfirmActions()}
-                  disabled={isExecuting}
-                  className="h-7 px-3 text-xs bg-amber-100 dark:bg-amber-900 border-amber-400 dark:border-amber-600 hover:bg-amber-200 dark:hover:bg-amber-800"
-                >
-                  {isExecuting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 mr-1" />}
-                  Confirm
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleCancelActions}
-                  disabled={isExecuting}
-                  className="h-7 w-7 p-0 text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-200"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
+              <div className="rounded-lg bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-400 dark:border-amber-600 shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-amber-100/50 dark:bg-amber-900/30 border-b border-amber-300 dark:border-amber-700">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span className="text-sm text-amber-800 dark:text-amber-200 font-semibold">
+                      {getPendingItemCount(pendingActions)} item{getPendingItemCount(pendingActions) !== 1 ? 's' : ''} ready
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => handleConfirmActions()}
+                      disabled={isExecuting}
+                      className="h-8 px-4 text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white"
+                    >
+                      {isExecuting ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Check className="h-3 w-3 mr-1" />}
+                      Confirm All
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleCancelActions}
+                      disabled={isExecuting}
+                      className="h-8 w-8 p-0 text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-200 hover:bg-amber-200/50"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+                <div className="px-4 py-2 text-xs text-amber-700 dark:text-amber-300">
+                  Say "confirm" or keep refining the proposal
+                </div>
               </div>
             )}
 
