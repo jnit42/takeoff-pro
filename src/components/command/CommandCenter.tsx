@@ -168,6 +168,11 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
     
     const commandText = inputValue.trim();
     setInputValue('');
+    
+    // Stop voice recording when sending
+    if (isListening) {
+      stopListening();
+    }
 
     // Add user message
     addMessage('user', commandText);
@@ -537,22 +542,33 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
 
             {/* Input - Textarea for multi-line dictation */}
             <form onSubmit={handleSubmit} className="flex gap-2 items-end">
-              <textarea
-                ref={inputRef}
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={(e) => {
-                  // Submit on Enter (without Shift)
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSubmit();
-                  }
-                }}
-                placeholder={projectId ? "Type or speak a command..." : "Select a project first..."}
-                className="flex-1 min-h-[44px] max-h-[120px] resize-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={isExecuting || !!pendingActions}
-                rows={Math.min(4, Math.max(1, inputValue.split('\n').length))}
-              />
+              <div className="flex-1 relative">
+                <textarea
+                  ref={inputRef}
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    // Submit on Enter (without Shift)
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSubmit();
+                    }
+                  }}
+                  placeholder={projectId ? "Type or speak a command..." : "Select a project first..."}
+                  className="w-full min-h-[44px] max-h-[160px] overflow-y-auto resize-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 leading-relaxed"
+                  disabled={isExecuting || !!pendingActions}
+                  style={{
+                    height: 'auto',
+                    minHeight: '44px',
+                  }}
+                  onInput={(e) => {
+                    // Auto-resize textarea
+                    const target = e.target as HTMLTextAreaElement;
+                    target.style.height = 'auto';
+                    target.style.height = Math.min(target.scrollHeight, 160) + 'px';
+                  }}
+                />
+              </div>
               
               {voiceSupported && (
                 <Button
@@ -586,6 +602,7 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
                 <Send className="h-4 w-4" />
               </Button>
             </form>
+            
           </TabsContent>
 
           <TabsContent value="history" className="flex-1 mt-0 data-[state=inactive]:hidden overflow-hidden">
