@@ -151,7 +151,7 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
 
   const addMessage = (role: 'user' | 'system' | 'preview' | 'suggestion', content: string, extra?: Partial<Message>) => {
     const newMessage: Message = {
-      id: Date.now().toString(),
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       role,
       content,
       timestamp: new Date(),
@@ -191,27 +191,40 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
       return;
     }
 
-    // If we have pending actions, send follow-up to AI with context
-    if (pendingActions) {
-      addMessage('system', '🔄 Updating proposal...');
+    // Build conversation history for AI context (last 10 messages)
+    const conversationHistory = messages
+      .slice(-10)
+      .map(m => ({
+        role: m.role === 'user' ? 'user' : 'assistant',
+        content: m.content
+      }));
+
+    // If we have pending actions OR just asking about recent context, send as follow-up
+    const isAskingAboutContext = !pendingActions && /why|how|what|explain/i.test(commandText);
+    
+    if (pendingActions || isAskingAboutContext) {
+      addMessage('system', pendingActions ? '🔄 Updating...' : '🤔 Thinking...');
       
       try {
-        const pendingContext = pendingActions.map(a => formatActionPreview(a)).join('\n');
+        const pendingContext = pendingActions 
+          ? pendingActions.map(a => formatActionPreview(a)).join('\n')
+          : '';
         
         const { data, error } = await supabase.functions.invoke('ai-command-parse', {
           body: { 
             message: commandText,
             projectContext: { projectId, projectType },
             pendingActions: pendingContext,
+            conversationHistory,
             isFollowUp: true
           }
         });
 
-        setMessages(prev => prev.slice(0, -1)); // Remove "Updating proposal" message
+        setMessages(prev => prev.slice(0, -1)); // Remove loading message
 
         if (error) {
           console.error('[AI Follow-up] Error:', error);
-          addMessage('system', "I couldn't process that. Try rephrasing or say 'confirm' when ready.");
+          addMessage('system', "I couldn't process that. Try rephrasing.");
           return;
         }
 
@@ -224,9 +237,10 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
             .map((a) => `• ${formatActionPreview(a)}`)
             .join('\n');
           
-          addMessage('preview', `Updated Proposal:\n${actionPreview}\n\n${data.message || 'Say "confirm" when ready, or keep refining.'}`, { actions: newActions });
+          const msg = data.message ? `${data.message}\n\n` : '';
+          addMessage('preview', `${msg}Proposed:\n${actionPreview}\n\nRefine or say "confirm".`, { actions: newActions });
         } else if (data.message) {
-          // AI responded with explanation, not new actions
+          // AI responded with explanation
           addMessage('system', data.message);
         }
         
@@ -234,7 +248,7 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
       } catch (err) {
         console.error('[AI Follow-up] Exception:', err);
         setMessages(prev => prev.slice(0, -1));
-        addMessage('system', "Something went wrong. Try again or say 'confirm' to proceed with current proposal.");
+        addMessage('system', "Something went wrong. Try again.");
         return;
       }
     }
@@ -402,7 +416,7 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
 
   const handleCancelActions = () => {
     setPendingActions(null);
-    addMessage('system', 'Actions cancelled.');
+    addMessage('system', 'Proposal cleared. You can still ask questions about the last estimate or start a new one.');
   };
 
   const handleUndo = async (logId: string) => {
@@ -563,75 +577,37 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
               ))}
             </div>
 
-            {/* Voice Status - Always show when voice is supported */}
-            {voiceSupported && (
+            {/* Voice Status - compact */}
+            {voiceSupported && voiceStatus !== 'idle' && (
               <div className={cn(
-                'flex items-center gap-2 px-3 py-2 rounded-lg text-xs border',
-                voiceStatus === 'listening' && 'bg-green-500/10 border-green-500/30 text-green-600',
-                voiceStatus === 'processing' && 'bg-yellow-500/10 border-yellow-500/30 text-yellow-600',
-                voiceStatus === 'error' && 'bg-destructive/10 border-destructive/30 text-destructive',
-                voiceStatus === 'permission-denied' && 'bg-destructive/10 border-destructive/30 text-destructive',
-                voiceStatus === 'idle' && 'bg-muted border-border text-muted-foreground',
+                'flex items-center gap-2 px-3 py-1.5 rounded-md text-xs',
+                voiceStatus === 'listening' && 'bg-green-500/10 text-green-600',
+                voiceStatus === 'processing' && 'bg-yellow-500/10 text-yellow-600',
+                voiceStatus === 'error' && 'bg-destructive/10 text-destructive',
+                voiceStatus === 'permission-denied' && 'bg-destructive/10 text-destructive',
               )}>
-                <div className={cn(
-                  'h-2 w-2 rounded-full',
-                  voiceConfig.bgColor,
-                  voiceConfig.pulse && 'animate-pulse'
-                )} />
-                <span className="flex-1">{voiceConfig.message}</span>
-                {voiceStatus === 'permission-denied' && (
-                  <a 
-                    href="https://support.google.com/chrome/answer/2693767" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-accent hover:underline"
-                  >
-                    Enable mic <ExternalLink className="h-3 w-3" />
-                  </a>
-                )}
-                {isListening && interimTranscript && (
-                  <span className="italic text-muted-foreground">"{interimTranscript}"</span>
-                )}
+                <div className={cn('h-2 w-2 rounded-full', voiceConfig.bgColor, voiceConfig.pulse && 'animate-pulse')} />
+                <span>{voiceConfig.message}</span>
               </div>
             )}
 
-            {/* Not supported message */}
-            {!voiceSupported && (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-muted text-muted-foreground">
-                <HelpCircle className="h-3 w-3" />
-                <span>Voice not supported. Use Chrome for voice commands.</span>
-              </div>
-            )}
-
-            {/* Input - Textarea for multi-line dictation */}
+            {/* Input area */}
             <form onSubmit={handleSubmit} className="flex gap-2 items-end">
-              <div className="flex-1 relative">
-                <textarea
-                  ref={inputRef}
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    // Submit on Enter (without Shift)
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSubmit();
-                    }
-                  }}
-                  placeholder={projectId ? "Type or speak a command..." : "Select a project first..."}
-                  className="w-full min-h-[44px] max-h-[160px] overflow-y-auto resize-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 leading-relaxed"
-                  disabled={isExecuting || !!pendingActions}
-                  style={{
-                    height: 'auto',
-                    minHeight: '44px',
-                  }}
-                  onInput={(e) => {
-                    // Auto-resize textarea
-                    const target = e.target as HTMLTextAreaElement;
-                    target.style.height = 'auto';
-                    target.style.height = Math.min(target.scrollHeight, 160) + 'px';
-                  }}
-                />
-              </div>
+              <textarea
+                ref={inputRef}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmit();
+                  }
+                }}
+                placeholder={projectId ? "Ask questions or give commands..." : "Select a project first..."}
+                className="flex-1 min-h-[40px] max-h-[100px] overflow-y-auto resize-none rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={isExecuting}
+                rows={1}
+              />
               
               {voiceSupported && (
                 <Button
@@ -639,28 +615,22 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
                   variant={isListening ? 'destructive' : 'outline'}
                   size="icon"
                   onClick={isListening ? stopListening : startListening}
-                  disabled={isExecuting || !!pendingActions || voiceStatus === 'permission-denied'}
+                  disabled={isExecuting || voiceStatus === 'permission-denied'}
                   title={voiceStatusMessage}
                   className={cn(
-                    'relative transition-all',
-                    isListening && 'ring-2 ring-destructive ring-offset-2 animate-pulse'
+                    'shrink-0 transition-all',
+                    isListening && 'ring-2 ring-destructive ring-offset-2'
                   )}
                 >
-                  {isListening ? (
-                    <>
-                      <MicOff className="h-4 w-4" />
-                      <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-destructive animate-ping" />
-                    </>
-                  ) : (
-                    <Mic className="h-4 w-4" />
-                  )}
+                  {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
                 </Button>
               )}
               
               <Button
                 type="submit"
                 size="icon"
-                disabled={!inputValue.trim() || isExecuting || !!pendingActions}
+                disabled={!inputValue.trim() || isExecuting}
+                className="shrink-0"
               >
                 <Send className="h-4 w-4" />
               </Button>

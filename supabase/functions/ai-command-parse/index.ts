@@ -124,7 +124,7 @@ serve(async (req) => {
   }
 
   try {
-    const { message, projectContext, pendingActions, isFollowUp } = await req.json();
+    const { message, projectContext, pendingActions, conversationHistory, isFollowUp } = await req.json();
     
     if (!message || typeof message !== 'string') {
       return new Response(
@@ -132,6 +132,8 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    console.log('[AI Parse] Conversation history:', conversationHistory?.length || 0, 'messages');
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
@@ -276,6 +278,24 @@ If they're asking a question, answer it clearly. If they're requesting a change,
 
     console.log('[AI Parse] Is follow-up:', isFollowUp);
 
+    // Build messages array with conversation history for context
+    const aiMessages: Array<{ role: string; content: string }> = [
+      { role: 'system', content: systemPrompt }
+    ];
+
+    // Add conversation history if available (for context)
+    if (conversationHistory && Array.isArray(conversationHistory) && conversationHistory.length > 0) {
+      for (const msg of conversationHistory.slice(-8)) { // Last 8 messages for context
+        aiMessages.push({
+          role: msg.role === 'user' ? 'user' : 'assistant',
+          content: msg.content.slice(0, 500) // Truncate long messages
+        });
+      }
+    }
+
+    // Add current user message
+    aiMessages.push({ role: 'user', content: userPrompt });
+
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -284,10 +304,7 @@ If they're asking a question, answer it clearly. If they're requesting a change,
       },
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
+        messages: aiMessages,
       }),
     });
 
