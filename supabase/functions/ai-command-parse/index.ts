@@ -82,10 +82,14 @@ const CONSTRUCTION_KNOWLEDGE = `
 - For 1000 SF: 10 boxes (1 lb each) or 2 boxes (5 lb each)
 - Specify: "Drywall Screws 1-1/4" (1 lb box)" for 1/2" drywall
 
-**Corner bead:**
-- 8 LF per corner × number of outside corners
-- 4 corners = 32 LF
-- Specify: "Metal Corner Bead (8' lengths)" - need 4 pieces for 32 LF
+**Corner bead (for OUTSIDE corners only):**
+- Only needed where drywall wraps around an OUTSIDE corner (convex angle)
+- NOT needed for inside corners (use tape for those)
+- Calculate: number of outside corners × ceiling height
+- Example: 3-wall U-shape in basement = 2 outside corners × 8' = 16 LF
+- Specify: "Metal Corner Bead (8' lengths)" 
+- Pieces needed: total LF ÷ 8, round up
+- 16 LF = 2 pieces (8' each)
 
 **Sandpaper - CRITICAL for finishing:**
 - Drywall finishing requires 2 grits:
