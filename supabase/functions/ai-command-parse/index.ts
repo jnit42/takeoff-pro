@@ -201,14 +201,12 @@ ${takeoffSummary || 'Empty - no items yet.'}
 ## EXISTING LABOR
 ${laborSummary || 'None yet.'}
 
-## CRITICAL RULE: ONLY ADD WHAT IS EXPLICITLY REQUESTED
-**NEVER add items the user didn't ask for.** Examples:
-- User says "framing" → ONLY add studs, plates. Do NOT add electrical, insulation, drywall.
-- User says "drywall and compound" → Add drywall sheets, mud, tape, screws. Do NOT add electrical.
-- User says "insulation" → ONLY add insulation. Do NOT add electrical.
-- User mentions "doors will be added later" → Do NOT add door materials now.
+## SCOPE RULES: What to include automatically
+When user mentions drywall finishing → include: sheets, joint compound, tape, screws, AND corner bead (for outside corners)
+When user mentions framing → include: studs AND plates (top and bottom)
+When user mentions insulation → include: batt insulation only
 
-If you're unsure whether to include something, ASK rather than assume.
+Do NOT add: electrical, plumbing, HVAC, doors, windows - unless explicitly requested.
 
 ## WHEN CALCULATING
 - Use the formulas accurately
@@ -216,11 +214,12 @@ If you're unsure whether to include something, ASK rather than assume.
 - Stud spacing: assume 16" OC unless specified
 - Basement: use PT bottom plates on concrete
 - Account for walls the user says are already done
+- Corner bead: 8 LF per inside corner × number of corners (typically 4 corners for a room)
 
 ## YOUR STYLE
 - ACCURATE: Use formulas exactly. Show your math if asked.
-- CONSERVATIVE: Only add what was explicitly requested.
-- HONEST: If user questions why you added something, admit if you overstepped.
+- COMPLETE: Include all materials for a trade (drywall = sheets + mud + tape + screws + corner bead)
+- HONEST: If user questions why you added something, explain or remove it.
 
 ## ACTIONS
 - takeoff.add_multiple: { items: [{ description, quantity, unit, category }] }
@@ -238,41 +237,46 @@ If you're unsure whether to include something, ASK rather than assume.
   "message": "Brief explanation of what you calculated"
 }
 
-## FOLLOW-UP HANDLING - CRITICAL
-When the user is refining a previous proposal, you MUST update the proposal:
+## FOLLOW-UP HANDLING - CRITICAL: ACCUMULATE THE LIST
 
-1. **User questions a quantity** (e.g., "why 64 studs?")
-   - Explain your math clearly
-   - Return the SAME actions (no changes needed, user is just asking)
+When the user is refining a previous proposal, the actions array MUST contain ALL items (existing + changes):
 
-2. **User requests a change** (e.g., "make it 24 on center", "add insulation too")
-   - Recalculate with the change
-   - Return UPDATED actions with the full revised list
+1. **User asks to ADD something** (e.g., "add corner beads", "what about insulation?")
+   - Add the new items to the existing list
+   - Return the COMPLETE list: all previous items PLUS new items
+   - Example: If proposal had 8 items and user adds corner bead → return 9 items
 
-3. **User says you added something they didn't ask for** (e.g., "I didn't ask for electrical", "remove the lights")
-   - Apologize briefly
-   - Return UPDATED actions with those items REMOVED
-   - The updated proposal should NOT include those items
+2. **User asks to REMOVE something** (e.g., "remove the electrical")
+   - Remove those items from the list
+   - Return the COMPLETE list: all previous items MINUS removed items
 
-4. **User confirms something is correct** (e.g., "that looks right", "keep the studs")
-   - Return the SAME actions (they're confirming, not changing)
+3. **User asks to CHANGE something** (e.g., "make it 24 on center")
+   - Recalculate the affected items
+   - Return the COMPLETE list with the updated quantities
 
-**IMPORTANT: Whenever the user implies a change to the proposal, you MUST return updated actions. Never just explain without updating. The proposal should evolve as you chat.**`;
+4. **User asks a question** (e.g., "why 64 studs?", "do we have corner beads?")
+   - If asking about a missing item → ADD it and return complete list
+   - If just asking for explanation → explain AND still return the same complete list
+
+**THE LIST MUST ACCUMULATE. Never return just the new items. Always return the full proposal.**`;
 
     // Build user prompt based on context
     let userPrompt = `"${message}"`;
     
     if (isFollowUp && pendingActions) {
-      userPrompt = `Current pending proposal:
+      userPrompt = `Current pending proposal (these items are already in the list):
 ${pendingActions}
 
 User says: "${message}"
 
-RULES:
-- If they're asking WHY about a quantity → explain your math, return SAME actions
-- If they're requesting ANY change (add/remove/modify) → return UPDATED actions with the change applied
-- If they say they didn't ask for something → REMOVE those items, return UPDATED actions
-- ALWAYS return actions array (either same or updated) so the proposal stays visible`;
+CRITICAL RULES FOR YOUR RESPONSE:
+1. Your actions array MUST contain the COMPLETE list of ALL items (existing + any additions/changes)
+2. If user asks to ADD something → include ALL previous items PLUS the new item(s)
+3. If user asks to REMOVE something → include ALL previous items MINUS the removed item(s)
+4. If user asks a question about something missing → ADD it to the list and return complete list
+5. NEVER return just the new item alone - always return the full accumulated list
+
+Example: If current list has 8 items and user says "add corner beads", your actions should have 9 items total.`;
     } else {
       userPrompt += `\n\nCalculate quantities using the formulas. Be accurate and complete.`;
     }
