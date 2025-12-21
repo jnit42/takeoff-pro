@@ -7,6 +7,7 @@ export type ActionType =
   | 'project.create'
   | 'project.set_defaults'
   | 'takeoff.add_item'
+  | 'takeoff.add_multiple'
   | 'takeoff.update_item'
   | 'takeoff.delete_item'
   | 'takeoff.generate_drafts_from_assemblies'
@@ -16,7 +17,10 @@ export type ActionType =
   | 'export.pdf'
   | 'export.csv'
   | 'qa.show_issues'
-  | 'plans.open';
+  | 'plans.open'
+  | 'navigate.plans'
+  | 'navigate.takeoff'
+  | 'navigate.labor';
 
 export interface ParsedAction {
   type: ActionType;
