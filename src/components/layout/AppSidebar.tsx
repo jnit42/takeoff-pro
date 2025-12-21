@@ -23,12 +23,20 @@ const navItems = [
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
-export function AppSidebar() {
+interface AppSidebarProps {
+  onNavigate?: () => void;
+}
+
+export function AppSidebar({ onNavigate }: AppSidebarProps) {
   const location = useLocation();
   const { user, signOut } = useAuth();
 
+  const handleNavClick = () => {
+    onNavigate?.();
+  };
+
   return (
-    <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-sidebar text-sidebar-foreground flex flex-col">
+    <aside className="h-full w-64 bg-sidebar text-sidebar-foreground flex flex-col md:fixed md:left-0 md:top-0 md:z-40 md:h-screen">
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 py-5 border-b border-sidebar-border">
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-primary">
@@ -49,6 +57,7 @@ export function AppSidebar() {
               <li key={item.to}>
                 <NavLink
                   to={item.to}
+                  onClick={handleNavClick}
                   className={cn(
                     'nav-item',
                     isActive && 'nav-item-active'
