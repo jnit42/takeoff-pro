@@ -1,6 +1,6 @@
 /**
- * Voice Input Hook - Enhanced with status, push-to-talk, error handling
- * Fixed: stable recognition instance, proper event handling
+ * Voice Input Hook - Continuous dictation with accumulation
+ * Fixed: accumulates text, auto-restarts on timeout, stable instance
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -26,6 +26,7 @@ interface UseVoiceInputReturn {
   startListening: () => void;
   stopListening: () => void;
   toggleListening: () => void;
+  clearTranscript: () => void;
 }
 
 // Check for browser support
@@ -78,7 +79,7 @@ interface SpeechRecognitionErrorEvent {
 
 const STATUS_MESSAGES: Record<VoiceStatus, string> = {
   idle: 'Click mic to speak',
-  listening: '🎤 Listening... speak now',
+  listening: '🎤 Listening... click to stop',
   processing: 'Processing...',
   error: 'Error occurred',
   'not-supported': 'Voice not supported. Try Chrome.',
@@ -92,20 +93,20 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInput
     if (!SpeechRecognition) return 'not-supported';
     return 'idle';
   });
-  const [transcript, setTranscript] = useState('');
   const [interimTranscript, setInterimTranscript] = useState('');
   
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const statusRef = useRef<VoiceStatus>(status);
+  const shouldRestartRef = useRef(false); // Track if we want to auto-restart
+  const accumulatedTextRef = useRef(''); // Accumulated final text
   
-  // Keep refs in sync with latest callbacks to avoid stale closures
+  // Keep refs in sync with latest callbacks
   const callbacksRef = useRef({ onResult, onInterim, onError, onStatusChange });
   callbacksRef.current = { onResult, onInterim, onError, onStatusChange };
 
   const isSupported = Boolean(SpeechRecognition);
   const isListening = status === 'listening';
 
-  // Update status helper
   const updateStatus = useCallback((newStatus: VoiceStatus) => {
     statusRef.current = newStatus;
     setStatus(newStatus);
@@ -121,63 +122,73 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInput
 
     console.log('[Voice] Initializing SpeechRecognition...');
     const recognition = new SpeechRecognition() as SpeechRecognitionInstance;
-    recognition.continuous = true; // Keep listening until stopped
+    recognition.continuous = true; // Keep listening
     recognition.interimResults = true;
     recognition.lang = language;
 
     recognition.onstart = () => {
       console.log('[Voice] Recognition started');
       updateStatus('listening');
-      setTranscript('');
       setInterimTranscript('');
     };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let finalTranscript = '';
+      let newFinalText = '';
       let interim = '';
 
+      // Process results from the latest batch
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         const text = result[0].transcript;
         
         if (result.isFinal) {
-          finalTranscript += text;
+          newFinalText += text;
         } else {
           interim += text;
         }
       }
 
-      // Always update interim for live display
+      // Show current interim text (combined with accumulated)
+      const displayInterim = accumulatedTextRef.current + (accumulatedTextRef.current ? ' ' : '') + interim;
       setInterimTranscript(interim);
-      callbacksRef.current.onInterim?.(interim);
+      callbacksRef.current.onInterim?.(displayInterim);
       
-      console.log('[Voice] Result:', { final: finalTranscript, interim });
+      console.log('[Voice] Result:', { accumulated: accumulatedTextRef.current, newFinal: newFinalText, interim });
 
-      if (finalTranscript) {
-        let processed = finalTranscript.trim();
-        if (autoPunctuation && processed.length > 0 && !/[.!?]$/.test(processed)) {
+      // If we got final text, accumulate it
+      if (newFinalText) {
+        // Add space between accumulated sentences
+        if (accumulatedTextRef.current) {
+          accumulatedTextRef.current += ' ';
+        }
+        
+        let processed = newFinalText.trim();
+        if (autoPunctuation && processed.length > 0 && !/[.!?,]$/.test(processed)) {
           processed += '.';
         }
-        setTranscript(processed);
-        callbacksRef.current.onResult?.(processed);
+        
+        accumulatedTextRef.current += processed;
+        
+        // Notify with full accumulated text
+        callbacksRef.current.onResult?.(accumulatedTextRef.current);
       }
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       console.error('[Voice] Error:', event.error);
       
-      let errorStatus: VoiceStatus = 'error';
       let message = 'Speech recognition error';
 
       switch (event.error) {
         case 'not-allowed':
-          errorStatus = 'permission-denied';
-          message = 'Microphone access denied. Please allow microphone access in your browser settings.';
-          break;
-        case 'no-speech':
-          message = 'No speech detected. Please try again.';
-          // Don't change status for no-speech, just notify
+          updateStatus('permission-denied');
+          shouldRestartRef.current = false;
+          message = 'Microphone access denied. Please allow in browser settings.';
           callbacksRef.current.onError?.(message);
+          return;
+        case 'no-speech':
+          // No speech detected - this is normal, don't treat as error
+          console.log('[Voice] No speech detected, will auto-restart if still listening');
           return;
         case 'network':
           message = 'Network error. Please check your connection.';
@@ -189,27 +200,39 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInput
           message = event.message || 'Speech recognition error';
       }
 
-      updateStatus(errorStatus);
       callbacksRef.current.onError?.(message);
     };
 
     recognition.onend = () => {
-      console.log('[Voice] Recognition ended, current status:', statusRef.current);
-      // Only reset to idle if not already in an error state
-      if (statusRef.current === 'listening' || statusRef.current === 'processing') {
+      console.log('[Voice] Recognition ended, shouldRestart:', shouldRestartRef.current);
+      
+      // Auto-restart if we're supposed to still be listening
+      if (shouldRestartRef.current) {
+        console.log('[Voice] Auto-restarting...');
+        setTimeout(() => {
+          try {
+            recognition.start();
+          } catch (e) {
+            console.error('[Voice] Auto-restart failed:', e);
+            updateStatus('idle');
+            shouldRestartRef.current = false;
+          }
+        }, 100);
+      } else {
         updateStatus('idle');
+        setInterimTranscript('');
       }
-      setInterimTranscript('');
     };
 
     recognitionRef.current = recognition;
-    console.log('[Voice] Recognition initialized successfully');
+    console.log('[Voice] Recognition initialized');
 
     return () => {
-      console.log('[Voice] Cleaning up recognition');
+      console.log('[Voice] Cleanup');
+      shouldRestartRef.current = false;
       recognition.abort();
     };
-  }, [language, autoPunctuation, updateStatus]); // Removed status from deps!
+  }, [language, autoPunctuation, updateStatus]);
 
   const startListening = useCallback(() => {
     const recognition = recognitionRef.current;
@@ -224,11 +247,13 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInput
     }
     
     console.log('[Voice] Starting...');
+    shouldRestartRef.current = true; // Enable auto-restart
+    accumulatedTextRef.current = ''; // Clear accumulated text on new session
+    
     try {
       recognition.start();
     } catch (error) {
       console.error('[Voice] Failed to start:', error);
-      // If already started, try to stop and restart
       if (error instanceof Error && error.message.includes('already started')) {
         recognition.stop();
         setTimeout(() => {
@@ -237,10 +262,12 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInput
           } catch (e) {
             console.error('[Voice] Retry failed:', e);
             updateStatus('error');
+            shouldRestartRef.current = false;
           }
         }, 100);
       } else {
         updateStatus('error');
+        shouldRestartRef.current = false;
       }
     }
   }, [updateStatus]);
@@ -250,6 +277,8 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInput
     if (!recognition) return;
     
     console.log('[Voice] Stopping...');
+    shouldRestartRef.current = false; // Disable auto-restart
+    
     try {
       recognition.stop();
     } catch (error) {
@@ -265,15 +294,21 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInput
     }
   }, [startListening, stopListening]);
 
+  const clearTranscript = useCallback(() => {
+    accumulatedTextRef.current = '';
+    setInterimTranscript('');
+  }, []);
+
   return {
     isListening,
     isSupported,
     status,
     statusMessage: STATUS_MESSAGES[status],
-    transcript,
+    transcript: accumulatedTextRef.current,
     interimTranscript,
     startListening,
     stopListening,
     toggleListening,
+    clearTranscript,
   };
 }

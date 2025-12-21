@@ -6,6 +6,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import {
   Send,
   Mic,
@@ -171,8 +172,8 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
     // Add user message
     addMessage('user', commandText);
 
-    // Parse command using rule registry
-    const result = parseCommand(commandText, { projectId, projectType });
+    // First try deterministic parser
+    let result = parseCommand(commandText, { projectId, projectType });
 
     // Handle capabilities/help command specially
     if (result.success && result.actions.length === 1 && (result.actions[0] as { type: string }).type === 'system.capabilities') {
@@ -184,16 +185,79 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
       return;
     }
 
+    // If deterministic parser failed, try AI parsing
     if (!result.success) {
-      if (result.missingInfo) {
-        addMessage('system', result.missingInfo);
-      } else if (result.error && result.suggestions && result.suggestions.length > 0) {
-        // Show smart fallback with clickable suggestions
-        addMessage('suggestion', result.error, { suggestions: result.suggestions });
-      } else if (result.error) {
-        addMessage('system', result.error);
+      addMessage('system', '🤔 Checking with AI...');
+      
+      try {
+        const { data, error } = await supabase.functions.invoke('ai-command-parse', {
+          body: { 
+            message: commandText,
+            projectContext: { projectId, projectType }
+          }
+        });
+
+        if (error) {
+          console.error('[AI Parse] Error:', error);
+          // Show original fallback
+          if (result.suggestions && result.suggestions.length > 0) {
+            setMessages(prev => prev.slice(0, -1)); // Remove "Checking with AI" message
+            addMessage('suggestion', result.error || "I couldn't understand that.", { suggestions: result.suggestions });
+          } else {
+            setMessages(prev => prev.slice(0, -1));
+            addMessage('system', result.error || "I couldn't understand that command.");
+          }
+          return;
+        }
+
+        console.log('[AI Parse] Response:', data);
+        
+        // Remove "Checking with AI" message
+        setMessages(prev => prev.slice(0, -1));
+
+        if (data.error) {
+          toast({ title: 'AI Error', description: data.error, variant: 'destructive' });
+          if (result.suggestions && result.suggestions.length > 0) {
+            addMessage('suggestion', result.error || "I couldn't understand that.", { suggestions: result.suggestions });
+          }
+          return;
+        }
+
+        if (data.success && data.actions && data.actions.length > 0) {
+          // AI successfully parsed - use those actions
+          result = {
+            success: true,
+            actions: data.actions,
+            schemaVersion: result.schemaVersion,
+            parserVersion: result.parserVersion + '+AI'
+          };
+          
+          // If there are follow-up questions, show them
+          if (data.followUpQuestions && data.followUpQuestions.length > 0) {
+            addMessage('system', `📝 ${data.followUpQuestions.join('\n')}`);
+          }
+        } else if (data.message) {
+          addMessage('system', data.message);
+          return;
+        } else {
+          // AI also couldn't understand
+          if (result.suggestions && result.suggestions.length > 0) {
+            addMessage('suggestion', result.error || "I couldn't understand that.", { suggestions: result.suggestions });
+          } else {
+            addMessage('system', result.error || "I couldn't understand that command. Try 'help' for examples.");
+          }
+          return;
+        }
+      } catch (err) {
+        console.error('[AI Parse] Exception:', err);
+        setMessages(prev => prev.slice(0, -1));
+        if (result.suggestions && result.suggestions.length > 0) {
+          addMessage('suggestion', result.error || "I couldn't understand that.", { suggestions: result.suggestions });
+        } else {
+          addMessage('system', result.error || "I couldn't understand that command.");
+        }
+        return;
       }
-      return;
     }
 
     // Show proposed actions for confirmation - cast to executor type

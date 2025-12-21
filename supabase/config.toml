@@ -1,1 +1,4 @@
 project_id = "pcdbqdisikedlivjgtrs"
+
+[functions.ai-command-parse]
+verify_jwt = false
