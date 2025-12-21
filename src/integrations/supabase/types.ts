@@ -706,6 +706,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      owns_plan_file_path: { Args: { file_path: string }; Returns: boolean }
     }
     Enums: {
       app_role: "owner" | "estimator"

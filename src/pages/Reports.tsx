@@ -1,45 +1,72 @@
 import { useQuery } from '@tanstack/react-query';
-import { BarChart3, Download, Loader2, TrendingUp, DollarSign, FolderKanban } from 'lucide-react';
+import { BarChart3, Download, Loader2, TrendingUp, DollarSign, FolderKanban, FileSpreadsheet, Users } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { formatCurrency } from '@/lib/constants';
+import { exportTakeoffCSV, exportLaborCSV } from '@/lib/exportUtils';
+import { useToast } from '@/hooks/use-toast';
 
 export default function Reports() {
+  const { toast } = useToast();
+
   const { data: stats, isLoading } = useQuery({
     queryKey: ['report-stats'],
     queryFn: async () => {
       const { data: projects } = await supabase
         .from('projects')
-        .select('id');
+        .select('id, name');
 
       const { data: takeoffItems } = await supabase
         .from('takeoff_items')
-        .select('extended_cost');
+        .select('extended_cost, draft');
 
       const { data: laborEstimates } = await supabase
         .from('labor_estimates')
-        .select('total');
+        .select('total, labor_line_items(extended)');
 
-      const totalMaterials = takeoffItems?.reduce(
+      // Only count active items for totals
+      const activeItems = takeoffItems?.filter(item => !item.draft) || [];
+      const totalMaterials = activeItems.reduce(
         (sum, item) => sum + (Number(item.extended_cost) || 0),
         0
-      ) || 0;
+      );
 
       const totalLabor = laborEstimates?.reduce(
         (sum, est) => sum + (Number(est.total) || 0),
         0
       ) || 0;
 
+      const draftCount = takeoffItems?.filter(item => item.draft).length || 0;
+      const activeCount = activeItems.length;
+
       return {
         projectCount: projects?.length || 0,
+        projects: projects || [],
         totalMaterials,
         totalLabor,
         grandTotal: totalMaterials + totalLabor,
+        draftCount,
+        activeCount,
+        takeoffItems: takeoffItems || [],
+        laborEstimates: laborEstimates || [],
       };
     },
   });
+
+  const handleExportAllTakeoff = () => {
+    if (!stats) return;
+    exportTakeoffCSV(stats.takeoffItems as any, 'All_Projects', true);
+    toast({ title: 'All takeoff items exported' });
+  };
+
+  const handleExportAllLabor = () => {
+    if (!stats) return;
+    exportLaborCSV(stats.laborEstimates as any, 'All_Projects');
+    toast({ title: 'All labor items exported' });
+  };
 
   return (
     <AppLayout>
@@ -52,10 +79,24 @@ export default function Reports() {
               Overview of your estimating activity
             </p>
           </div>
-          <Button variant="outline">
-            <Download className="h-4 w-4 mr-2" />
-            Export All
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                <Download className="h-4 w-4 mr-2" />
+                Export All
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleExportAllTakeoff}>
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                All Takeoff Items (CSV)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportAllLabor}>
+                <Users className="h-4 w-4 mr-2" />
+                All Labor Items (CSV)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {/* Stats Grid */}
@@ -80,11 +121,14 @@ export default function Reports() {
                 <CardHeader className="pb-2">
                   <CardDescription className="flex items-center gap-2">
                     <TrendingUp className="h-4 w-4" />
-                    Total Materials
+                    Total Materials (Active)
                   </CardDescription>
                   <CardTitle className="text-3xl font-mono">
                     {formatCurrency(stats?.totalMaterials || 0)}
                   </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {stats?.activeCount || 0} items ({stats?.draftCount || 0} drafts)
+                  </p>
                 </CardHeader>
               </Card>
 
