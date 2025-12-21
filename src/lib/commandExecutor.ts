@@ -67,6 +67,9 @@ export async function executeAction(
       case 'takeoff.add_item':
         return await executeTakeoffAddItem(action.params, context);
 
+      case 'takeoff.add_multiple':
+        return await executeTakeoffAddMultiple(action.params, context);
+
       case 'takeoff.generate_drafts_from_assemblies':
         return await executeTakeoffGenerateDrafts(action.params, context);
 
@@ -317,6 +320,63 @@ async function executeTakeoffAddItem(
     data: { itemId: item.id },
     undoable: true,
     undoData: { itemId: item.id },
+  };
+}
+
+async function executeTakeoffAddMultiple(
+  params: Record<string, unknown>,
+  context: ExecutionContext
+): Promise<ExecutionResult> {
+  if (!context.projectId) {
+    throw new Error('No project selected. Please open a project first.');
+  }
+
+  const items = params.items as Array<{
+    description: string;
+    quantity: number;
+    unit: string;
+    category?: string;
+    unit_cost?: number;
+    notes?: string;
+  }>;
+
+  if (!items || items.length === 0) {
+    return {
+      success: false,
+      actionType: 'takeoff.add_multiple',
+      message: 'No items provided',
+      undoable: false,
+    };
+  }
+
+  const insertData = items.map((item) => ({
+    project_id: context.projectId,
+    category: item.category || 'General',
+    description: item.description,
+    unit: item.unit || 'EA',
+    quantity: item.quantity || 0,
+    unit_cost: item.unit_cost || 0,
+    extended_cost: (item.quantity || 0) * (item.unit_cost || 0),
+    draft: true, // Always create as drafts so user can review
+    notes: item.notes || null,
+  }));
+
+  const { data: created, error } = await supabase
+    .from('takeoff_items')
+    .insert(insertData)
+    .select('id, description');
+
+  if (error) throw error;
+
+  const createdIds = (created || []).map((c) => c.id);
+
+  return {
+    success: true,
+    actionType: 'takeoff.add_multiple',
+    message: `Added ${createdIds.length} items as drafts. Use "Promote drafts" to finalize.`,
+    data: { itemIds: createdIds, count: createdIds.length },
+    undoable: true,
+    undoData: { itemIds: createdIds },
   };
 }
 
