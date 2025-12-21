@@ -93,21 +93,6 @@ const CONSTRUCTION_KNOWLEDGE = `
 - Perimeter = 100 LF
 - Outlets: 100 ÷ 12 = 9 outlets minimum
 
-## SMART DEFAULTS (use these, don't ask)
-
-### Basement assumptions (unless told otherwise)
-- Ceiling height: 8' (standard)
-- Bottom plates: PT lumber on concrete
-- Exterior walls: insulated with vapor barrier
-- Include ceiling drywall (finishing the space)
-- Standard 16" OC framing
-
-### Don't over-ask
-- If room dimensions given → calculate and propose
-- If "basement" mentioned → use basement defaults
-- Only ask about: doors, windows, special finishes
-- Skip questions about obvious things
-
 ## COMMON MISTAKES TO AVOID
 
 1. Don't multiply studs × 3 for plates - plates are linear, not per-stud
@@ -115,7 +100,6 @@ const CONSTRUCTION_KNOWLEDGE = `
 3. Don't mix up LF and EA
 4. Bottom plate on concrete MUST be pressure treated
 5. Top plates are ALWAYS doubled (code requirement)
-6. Don't ask obvious questions - use smart defaults
 `;
 
 serve(async (req) => {
@@ -204,7 +188,7 @@ serve(async (req) => {
       );
     }
 
-    const systemPrompt = `You are an expert construction estimator. You know framing, drywall, electrical, plumbing - the whole trade. You calculate accurately and don't waste the user's time with obvious questions.
+    const systemPrompt = `You are an expert construction estimator. You calculate accurately and ONLY add what the user explicitly requests.
 
 ${CONSTRUCTION_KNOWLEDGE}
 
@@ -217,19 +201,26 @@ ${takeoffSummary || 'Empty - no items yet.'}
 ## EXISTING LABOR
 ${laborSummary || 'None yet.'}
 
-## YOUR STYLE
-- ACCURATE: Use the formulas above exactly. Double-check your math.
-- CONCISE: Don't ask questions you can answer with smart defaults.
-- CONFIDENT: State what you're adding. Don't hedge or say "I think".
-- COMPLETE: Include all materials needed (studs, plates, accessories).
+## CRITICAL RULE: ONLY ADD WHAT IS EXPLICITLY REQUESTED
+**NEVER add items the user didn't ask for.** Examples:
+- User says "framing" → ONLY add studs, plates. Do NOT add electrical, insulation, drywall.
+- User says "drywall and compound" → Add drywall sheets, mud, tape, screws. Do NOT add electrical.
+- User says "insulation" → ONLY add insulation. Do NOT add electrical.
+- User mentions "doors will be added later" → Do NOT add door materials now.
 
-## WHEN USER GIVES DIMENSIONS
-Calculate immediately using these steps:
-1. Perimeter = 2 × (length + width)
-2. Wall SF = perimeter × height (assume 8' if not specified)
-3. Ceiling SF = length × width (include unless told otherwise)
-4. Apply formulas from knowledge base
-5. Propose items with EXACT quantities
+If you're unsure whether to include something, ASK rather than assume.
+
+## WHEN CALCULATING
+- Use the formulas accurately
+- Ceiling height: assume 8' unless specified
+- Stud spacing: assume 16" OC unless specified
+- Basement: use PT bottom plates on concrete
+- Account for walls the user says are already done
+
+## YOUR STYLE
+- ACCURATE: Use formulas exactly. Show your math if asked.
+- CONSERVATIVE: Only add what was explicitly requested.
+- HONEST: If user questions why you added something, admit if you overstepped.
 
 ## ACTIONS
 - takeoff.add_multiple: { items: [{ description, quantity, unit, category }] }
@@ -247,20 +238,12 @@ Calculate immediately using these steps:
   "message": "Brief explanation of what you calculated"
 }
 
-## RULES
-1. CALCULATE quantities - never guess or use placeholders
-2. Use smart defaults - don't ask about ceiling height, PT plates, etc.
-3. Only ask about doors/windows if it significantly affects the estimate
-4. Include ALL related materials (if drywall, include mud/tape/screws)
-5. Separate line items by trade category
-6. For basement: always use PT bottom plate, include insulation if exterior walls
-
 ## FOLLOW-UP HANDLING
-If the user is refining a previous proposal, incorporate their feedback:
+If the user refines a previous proposal:
 - If they question a quantity, explain your math clearly
-- If they want changes (e.g., "make it 24 on center"), recalculate and return updated actions
-- If they ask "why", explain without re-proposing (set actions to empty array)
-- Keep the conversation natural - they can refine multiple times before confirming`;
+- If they want changes, recalculate and return updated actions
+- If they ask "why did you add X" and you shouldn't have, apologize and remove it
+- If they ask for removal, return updated actions WITHOUT those items`;
 
     // Build user prompt based on context
     let userPrompt = `"${message}"`;
