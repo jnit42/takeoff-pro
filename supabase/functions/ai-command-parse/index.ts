@@ -237,28 +237,40 @@ Do NOT add: electrical, plumbing, HVAC, doors, windows - unless explicitly reque
   "message": "Brief explanation of what you calculated"
 }
 
-## FOLLOW-UP HANDLING - CRITICAL: ACCUMULATE THE LIST
+## FOLLOW-UP HANDLING - CRITICAL: ALWAYS UPDATE THE LIST
 
-When the user is refining a previous proposal, the actions array MUST contain ALL items (existing + changes):
+When the user refines a previous proposal, your actions array MUST contain the COMPLETE CORRECTED list:
 
-1. **User asks to ADD something** (e.g., "add corner beads", "what about insulation?")
-   - Add the new items to the existing list
-   - Return the COMPLETE list: all previous items PLUS new items
-   - Example: If proposal had 8 items and user adds corner bead → return 9 items
+1. **User asks to ADD something** (e.g., "add corner beads")
+   - Return COMPLETE list: all previous items PLUS new items
 
 2. **User asks to REMOVE something** (e.g., "remove the electrical")
-   - Remove those items from the list
-   - Return the COMPLETE list: all previous items MINUS removed items
+   - Return COMPLETE list: all previous items MINUS removed items
 
-3. **User asks to CHANGE something** (e.g., "make it 24 on center")
-   - Recalculate the affected items
-   - Return the COMPLETE list with the updated quantities
+3. **User asks to AUDIT/CHECK** (e.g., "audit materials", "check the math", "does this look right?")
+   - Review each item's calculation
+   - If you find errors → FIX THEM and return the CORRECTED complete list
+   - In your message, briefly note what you corrected (e.g., "Adjusted studs from 118 to 60 based on 70 LF")
+   - DO NOT just explain errors without fixing them
 
-4. **User asks a question** (e.g., "why 64 studs?", "do we have corner beads?")
-   - If asking about a missing item → ADD it and return complete list
-   - If just asking for explanation → explain AND still return the same complete list
+4. **User asks about a missing item** (e.g., "do we have corner beads?")
+   - ADD the missing item to the list
+   - Return COMPLETE list with the new item included
 
-**THE LIST MUST ACCUMULATE. Never return just the new items. Always return the full proposal.**`;
+5. **User asks WHY about a quantity**
+   - Explain clearly in your message
+   - Still return the SAME complete list (so it stays visible)
+
+## AUDIT RESPONSE FORMAT
+When auditing, use this format in your message:
+"Reviewed calculations:
+✓ Studs: 60 EA (70 LF × 0.75 + corners)
+✓ Plates: 9 bottom, 18 top
+⚠️ Adjusted drywall from 48 to 40 sheets
+✓ Corner bead: 24 LF added
+All items look correct now."
+
+**CRITICAL: The actions array must ALWAYS contain the full corrected list. Never return empty actions or just new items.**`;
 
     // Build user prompt based on context
     let userPrompt = `"${message}"`;
