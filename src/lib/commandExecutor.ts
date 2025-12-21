@@ -120,18 +120,21 @@ export async function executeActions(
     .filter(r => r.undoable && r.undoData)
     .map(r => ({ type: r.actionType, data: r.undoData }));
 
+  const insertData = {
+    project_id: context.projectId || null,
+    source: context.source,
+    command_text: context.commandText,
+    actions_json: actions as unknown as Record<string, unknown>,
+    status: allSuccess ? 'applied' : 'failed',
+    error: allSuccess ? null : results.find(r => !r.success)?.message,
+    undoable: undoData.length > 0,
+    undo_data: undoData.length > 0 ? undoData : null,
+  };
+
   const { data: logEntry, error: logError } = await supabase
     .from('action_log')
-    .insert({
-      project_id: context.projectId || null,
-      source: context.source,
-      command_text: context.commandText,
-      actions_json: actions as unknown as Record<string, unknown>,
-      status: allSuccess ? 'applied' : 'failed',
-      error: allSuccess ? null : results.find(r => !r.success)?.message,
-      undoable: undoData.length > 0,
-      undo_data: undoData.length > 0 ? undoData : null,
-    })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .insert(insertData as any)
     .select('id')
     .single();
 
