@@ -19,6 +19,7 @@ import {
   History,
   HelpCircle,
   AlertTriangle,
+  ExternalLink,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,7 +40,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useVoiceInput, type VoiceStatus } from '@/hooks/useVoiceInput';
-import { parseCommand, getCapabilities, PARSER_VERSION } from '@/command/rules';
+import { parseCommand, getCapabilities, PARSER_VERSION, type ParseSuggestion } from '@/command/rules';
 import { executeActions, undoAction, type ExecutionResult } from '@/lib/commandExecutor';
 import type { ParsedAction } from '@/lib/commandParser';
 import { ActionLogViewer } from './ActionLogViewer';
@@ -47,12 +48,13 @@ import { cn } from '@/lib/utils';
 
 interface Message {
   id: string;
-  role: 'user' | 'system' | 'preview';
+  role: 'user' | 'system' | 'preview' | 'suggestion';
   content: string;
   timestamp: Date;
   actions?: ParsedAction[];
   results?: ExecutionResult[];
   logId?: string;
+  suggestions?: ParseSuggestion[];
 }
 
 interface CommandCenterProps {
@@ -68,17 +70,24 @@ const QUICK_COMMANDS = [
   { label: 'Help', command: 'What can you do?' },
 ];
 
-const VOICE_STATUS_STYLES: Record<VoiceStatus, { color: string; pulse: boolean }> = {
-  idle: { color: 'bg-muted', pulse: false },
-  listening: { color: 'bg-green-500', pulse: true },
-  processing: { color: 'bg-yellow-500', pulse: true },
-  error: { color: 'bg-destructive', pulse: false },
-  'not-supported': { color: 'bg-muted', pulse: false },
-  'permission-denied': { color: 'bg-destructive', pulse: false },
+const VOICE_STATUS_CONFIG: Record<VoiceStatus, { color: string; bgColor: string; pulse: boolean; message: string }> = {
+  idle: { color: 'text-muted-foreground', bgColor: 'bg-muted', pulse: false, message: 'Click mic to speak' },
+  listening: { color: 'text-green-600', bgColor: 'bg-green-500', pulse: true, message: 'Listening... speak now' },
+  processing: { color: 'text-yellow-600', bgColor: 'bg-yellow-500', pulse: true, message: 'Processing...' },
+  error: { color: 'text-destructive', bgColor: 'bg-destructive', pulse: false, message: 'Error occurred' },
+  'not-supported': { color: 'text-muted-foreground', bgColor: 'bg-muted', pulse: false, message: 'Voice works best in Chrome/Edge desktop' },
+  'permission-denied': { color: 'text-destructive', bgColor: 'bg-destructive', pulse: false, message: 'Microphone blocked' },
 };
 
 // Money-impact action types that need stronger confirmation
 const MONEY_IMPACT_ACTIONS = ['takeoff.promote_drafts', 'takeoff.delete_drafts', 'export.pdf', 'export.csv'];
+
+// Actions that require a project context
+const PROJECT_REQUIRED_ACTIONS = [
+  'takeoff.add_item', 'takeoff.generate_drafts_from_assemblies', 'takeoff.promote_drafts', 
+  'takeoff.delete_drafts', 'labor.add_task_line', 'export.pdf', 'export.csv', 
+  'qa.show_issues', 'plans.open', 'project.set_defaults'
+];
 
 export function CommandCenter({ projectId, projectType, className }: CommandCenterProps) {
   const { user } = useAuth();
@@ -133,7 +142,7 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
     }
   }, [messages]);
 
-  const addMessage = (role: 'user' | 'system' | 'preview', content: string, extra?: Partial<Message>) => {
+  const addMessage = (role: 'user' | 'system' | 'preview' | 'suggestion', content: string, extra?: Partial<Message>) => {
     const newMessage: Message = {
       id: Date.now().toString(),
       role,
@@ -172,6 +181,9 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
     if (!result.success) {
       if (result.missingInfo) {
         addMessage('system', result.missingInfo);
+      } else if (result.error && result.suggestions && result.suggestions.length > 0) {
+        // Show smart fallback with clickable suggestions
+        addMessage('suggestion', result.error, { suggestions: result.suggestions });
       } else if (result.error) {
         addMessage('system', result.error);
       }
@@ -180,6 +192,14 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
 
     // Show proposed actions for confirmation - cast to executor type
     const actions = result.actions as unknown as ParsedAction[];
+    
+    // Check if any action requires project context
+    const needsProject = actions.some(a => PROJECT_REQUIRED_ACTIONS.includes(a.type));
+    if (needsProject && !projectId) {
+      addMessage('system', '⚠️ Please select a project first. This command requires a project context.');
+      return;
+    }
+    
     setPendingActions(actions);
     
     const actionPreview = actions
@@ -275,12 +295,12 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
     queryClient.invalidateQueries({ queryKey: ['action-log', projectId] });
   };
 
-  const handleQuickCommand = (command: string) => {
+  const handleSuggestionClick = (command: string) => {
     setInputValue(command);
     inputRef.current?.focus();
   };
 
-  const voiceStyle = VOICE_STATUS_STYLES[voiceStatus];
+  const voiceConfig = VOICE_STATUS_CONFIG[voiceStatus];
 
   return (
     <Card className={cn('flex flex-col h-full', className)}>
@@ -310,6 +330,14 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
 
         <CardContent className="flex-1 flex flex-col gap-3 p-3 pt-2 overflow-hidden">
           <TabsContent value="chat" className="flex-1 flex flex-col gap-3 mt-0 data-[state=inactive]:hidden overflow-hidden">
+            {/* Project Warning */}
+            {!projectId && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-warning/10 border border-warning/30 text-warning">
+                <AlertTriangle className="h-3 w-3 shrink-0" />
+                <span>No project selected. Some commands require a project context.</span>
+              </div>
+            )}
+
             {/* Messages */}
             <ScrollArea className="flex-1 pr-3" ref={scrollRef}>
               <div className="space-y-3">
@@ -320,15 +348,34 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
                       'rounded-lg p-3 text-sm',
                       msg.role === 'user' && 'bg-accent/10 ml-8',
                       msg.role === 'system' && 'bg-muted',
-                      msg.role === 'preview' && 'bg-warning/10 border border-warning/30'
+                      msg.role === 'preview' && 'bg-warning/10 border border-warning/30',
+                      msg.role === 'suggestion' && 'bg-accent/5 border border-accent/20'
                     )}
                   >
                     <div className="flex items-start gap-2">
                       {msg.role === 'preview' && <Sparkles className="h-4 w-4 text-warning shrink-0 mt-0.5" />}
+                      {msg.role === 'suggestion' && <HelpCircle className="h-4 w-4 text-accent shrink-0 mt-0.5" />}
                       {msg.role === 'system' && msg.results?.some(r => !r.success) && (
                         <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
                       )}
-                      <p className="whitespace-pre-wrap flex-1">{msg.content}</p>
+                      <div className="flex-1">
+                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                        {/* Clickable suggestions */}
+                        {msg.suggestions && msg.suggestions.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {msg.suggestions.map((s, idx) => (
+                              <Badge
+                                key={idx}
+                                variant="outline"
+                                className="cursor-pointer hover:bg-accent/20 transition-colors text-xs"
+                                onClick={() => handleSuggestionClick(s.command)}
+                              >
+                                {s.label}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -371,29 +418,41 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
                   key={qc.label}
                   variant="secondary"
                   className="cursor-pointer hover:bg-accent/20 transition-colors text-xs"
-                  onClick={() => handleQuickCommand(qc.command)}
+                  onClick={() => handleSuggestionClick(qc.command)}
                 >
                   {qc.label}
                 </Badge>
               ))}
             </div>
 
-            {/* Voice Status */}
-            {voiceSupported && voiceStatus !== 'idle' && (
+            {/* Voice Status - Always show when voice is supported */}
+            {voiceSupported && (
               <div className={cn(
-                'flex items-center gap-2 px-3 py-2 rounded-lg text-xs',
-                voiceStyle.color === 'bg-green-500' && 'bg-green-500/10 text-green-600',
-                voiceStyle.color === 'bg-yellow-500' && 'bg-yellow-500/10 text-yellow-600',
-                voiceStyle.color === 'bg-destructive' && 'bg-destructive/10 text-destructive',
+                'flex items-center gap-2 px-3 py-2 rounded-lg text-xs border',
+                voiceStatus === 'listening' && 'bg-green-500/10 border-green-500/30 text-green-600',
+                voiceStatus === 'processing' && 'bg-yellow-500/10 border-yellow-500/30 text-yellow-600',
+                voiceStatus === 'error' && 'bg-destructive/10 border-destructive/30 text-destructive',
+                voiceStatus === 'permission-denied' && 'bg-destructive/10 border-destructive/30 text-destructive',
+                voiceStatus === 'idle' && 'bg-muted border-border text-muted-foreground',
               )}>
                 <div className={cn(
                   'h-2 w-2 rounded-full',
-                  voiceStyle.color,
-                  voiceStyle.pulse && 'animate-pulse'
+                  voiceConfig.bgColor,
+                  voiceConfig.pulse && 'animate-pulse'
                 )} />
-                <span>{voiceStatusMessage}</span>
-                {interimTranscript && (
-                  <span className="italic text-muted-foreground ml-2">"{interimTranscript}"</span>
+                <span className="flex-1">{voiceConfig.message}</span>
+                {voiceStatus === 'permission-denied' && (
+                  <a 
+                    href="https://support.google.com/chrome/answer/2693767" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-accent hover:underline"
+                  >
+                    Enable mic <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+                {isListening && interimTranscript && (
+                  <span className="italic text-muted-foreground">"{interimTranscript}"</span>
                 )}
               </div>
             )}

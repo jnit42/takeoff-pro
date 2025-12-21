@@ -19,11 +19,17 @@ const allRules: CommandRule[] = [
   ...laborRules,
 ].sort((a, b) => b.priority - a.priority);
 
+export interface ParseSuggestion {
+  label: string;
+  command: string;
+}
+
 export interface ParseResult {
   success: boolean;
   actions: ParsedAction[];
   missingInfo?: string;
   error?: string;
+  suggestions?: ParseSuggestion[];
   schemaVersion: number;
   parserVersion: string;
 }
@@ -89,10 +95,14 @@ export function parseCommand(command: string, context: CommandContext = {}): Par
     };
   }
 
+  // Smart fallback with suggestions
+  const suggestions = getSmartSuggestions(trimmed);
+  
   return {
     success: false,
     actions: [],
-    error: getHelpText(),
+    error: suggestions.message,
+    suggestions: suggestions.suggestions,
     schemaVersion: SCHEMA_VERSION,
     parserVersion: PARSER_VERSION,
   };
@@ -111,15 +121,66 @@ export function getCapabilities(): { rules: { id: string; name: string; examples
   };
 }
 
-function getHelpText(): string {
-  return `I couldn't understand that command. Try things like:
-• "Create project [name]. Tax 7 markup 20 burden 35"
-• "Add drywall 1050 sf at $12.99"
-• "Generate drafts using framing + drywall"
-• "Promote all drafts"
-• "Export PDF"
-• "Show QA issues"
-• "What can you do?" for full list`;
+function getSmartSuggestions(command: string): { message: string; suggestions: ParseSuggestion[] } {
+  const lower = command.toLowerCase();
+  const suggestions: ParseSuggestion[] = [];
+  
+  // Keyword heuristics for smart suggestions
+  if (/export|pdf|csv|download|save/i.test(lower)) {
+    suggestions.push({ label: 'Export PDF', command: 'Export PDF' });
+    suggestions.push({ label: 'Export takeoff CSV', command: 'Export takeoff CSV' });
+  }
+  
+  if (/markup|tax|burden|percent|%/i.test(lower)) {
+    suggestions.push({ label: 'Set markup', command: 'Set markup 20 percent' });
+    suggestions.push({ label: 'Set tax', command: 'Set tax 7 percent' });
+    suggestions.push({ label: 'Set burden', command: 'Set burden 35 percent' });
+  }
+  
+  if (/draft|promote|finalize/i.test(lower)) {
+    suggestions.push({ label: 'Promote drafts', command: 'Promote all drafts' });
+    suggestions.push({ label: 'Delete drafts', command: 'Delete all drafts' });
+  }
+  
+  if (/drywall|stud|flooring|tile|framing|deck|lumber/i.test(lower)) {
+    suggestions.push({ label: 'Add drywall', command: 'Add drywall 500 sf at $12.99' });
+    suggestions.push({ label: 'Add studs', command: 'Add studs 100 each at $4.50' });
+  }
+  
+  if (/generate|assembly|assemblies/i.test(lower)) {
+    suggestions.push({ label: 'Generate from assemblies', command: 'Generate drafts using framing + drywall' });
+  }
+  
+  if (/qa|issue|check|review/i.test(lower)) {
+    suggestions.push({ label: 'Show QA issues', command: 'Show QA issues' });
+  }
+  
+  if (/plan|open|view|sheet/i.test(lower)) {
+    suggestions.push({ label: 'Open plans', command: 'Open plans' });
+  }
+  
+  if (/create|project|new/i.test(lower)) {
+    suggestions.push({ label: 'Create project', command: 'Create project My New Project' });
+  }
+  
+  // Add default suggestions if none matched
+  if (suggestions.length === 0) {
+    suggestions.push(
+      { label: 'Add takeoff item', command: 'Add drywall 500 sf at $12.99' },
+      { label: 'Generate drafts', command: 'Generate drafts using framing + drywall' },
+      { label: 'Set markup/tax', command: 'Set markup 20 tax 7 burden 35' },
+      { label: 'Export PDF', command: 'Export PDF' },
+      { label: 'Show help', command: 'What can you do?' }
+    );
+  }
+  
+  // Limit to 5 suggestions
+  const finalSuggestions = suggestions.slice(0, 5);
+  
+  return {
+    message: `I didn't understand that command. Did you mean one of these?`,
+    suggestions: finalSuggestions,
+  };
 }
 
 // Re-export types

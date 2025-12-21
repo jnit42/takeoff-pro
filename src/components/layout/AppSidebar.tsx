@@ -12,6 +12,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
+import { getFormattedVersion } from '@/lib/appVersion';
 
 const navItems = [
   { to: '/projects', label: 'Projects', icon: FolderKanban },
@@ -82,6 +83,13 @@ export function AppSidebar() {
           <LogOut className="h-4 w-4 mr-2" />
           Sign out
         </Button>
+      </div>
+
+      {/* Version Badge */}
+      <div className="border-t border-sidebar-border px-4 py-2">
+        <p className="text-[10px] text-sidebar-foreground/40 text-center">
+          {getFormattedVersion()}
+        </p>
       </div>
     </aside>
   );
