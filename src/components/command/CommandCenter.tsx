@@ -491,27 +491,27 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
             )}
 
             {/* Messages */}
-            <ScrollArea className="flex-1 pr-3" ref={scrollRef}>
-              <div className="space-y-3">
+            <ScrollArea className="flex-1" ref={scrollRef}>
+              <div className="space-y-3 pr-3">
                 {messages.map((msg) => (
                   <div
                     key={msg.id}
                     className={cn(
-                      'rounded-lg p-3 text-sm',
-                      msg.role === 'user' && 'bg-accent/10 ml-8',
-                      msg.role === 'system' && 'bg-muted',
-                      msg.role === 'preview' && 'bg-warning/10 border border-warning/30',
+                      'rounded-lg p-3 text-sm break-words',
+                      msg.role === 'user' && 'bg-primary/10 ml-6 border border-primary/20',
+                      msg.role === 'system' && 'bg-muted/80 border border-muted-foreground/10',
+                      msg.role === 'preview' && 'bg-amber-50 dark:bg-amber-950/30 border-2 border-amber-300 dark:border-amber-700',
                       msg.role === 'suggestion' && 'bg-accent/5 border border-accent/20'
                     )}
                   >
                     <div className="flex items-start gap-2">
-                      {msg.role === 'preview' && <Sparkles className="h-4 w-4 text-warning shrink-0 mt-0.5" />}
+                      {msg.role === 'preview' && <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />}
                       {msg.role === 'suggestion' && <HelpCircle className="h-4 w-4 text-accent shrink-0 mt-0.5" />}
                       {msg.role === 'system' && msg.results?.some(r => !r.success) && (
                         <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
                       )}
-                      <div className="flex-1">
-                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                      <div className="flex-1 min-w-0">
+                        <p className="whitespace-pre-wrap break-words">{msg.content}</p>
                         {/* Clickable suggestions */}
                         {msg.suggestions && msg.suggestions.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-2">
@@ -534,19 +534,19 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
               </div>
             </ScrollArea>
 
-            {/* Pending actions indicator - subtle, not blocking */}
+            {/* Pending actions indicator - prominent but clean */}
             {pendingActions && (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-accent/10 border border-accent/30">
-                <Sparkles className="h-3 w-3 text-accent" />
-                <span className="flex-1 text-accent">
+              <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-400 dark:border-amber-600 shadow-sm">
+                <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span className="flex-1 text-amber-800 dark:text-amber-200 font-medium">
                   {pendingActions.length} item{pendingActions.length > 1 ? 's' : ''} pending • Say "confirm" or keep refining
                 </span>
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
                   onClick={() => handleConfirmActions()}
                   disabled={isExecuting}
-                  className="h-6 px-2 text-xs"
+                  className="h-7 px-3 text-xs bg-amber-100 dark:bg-amber-900 border-amber-400 dark:border-amber-600 hover:bg-amber-200 dark:hover:bg-amber-800"
                 >
                   {isExecuting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 mr-1" />}
                   Confirm
@@ -556,9 +556,9 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
                   size="sm"
                   onClick={handleCancelActions}
                   disabled={isExecuting}
-                  className="h-6 px-2 text-xs text-muted-foreground"
+                  className="h-7 w-7 p-0 text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-200"
                 >
-                  <X className="h-3 w-3" />
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
             )}
@@ -591,50 +591,56 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
               </div>
             )}
 
-            {/* Input area */}
-            <form onSubmit={handleSubmit} className="flex gap-2 items-end">
-              <textarea
-                ref={inputRef}
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSubmit();
-                  }
-                }}
-                placeholder={projectId ? "Ask questions or give commands..." : "Select a project first..."}
-                className="flex-1 min-h-[40px] max-h-[100px] overflow-y-auto resize-none rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={isExecuting}
-                rows={1}
-              />
-              
-              {voiceSupported && (
-                <Button
-                  type="button"
-                  variant={isListening ? 'destructive' : 'outline'}
-                  size="icon"
-                  onClick={isListening ? stopListening : startListening}
-                  disabled={isExecuting || voiceStatus === 'permission-denied'}
-                  title={voiceStatusMessage}
-                  className={cn(
-                    'shrink-0 transition-all',
-                    isListening && 'ring-2 ring-destructive ring-offset-2'
+            {/* Input area - redesigned for clarity */}
+            <div className="border-t border-border pt-3 mt-auto">
+              <form onSubmit={handleSubmit} className="flex items-center gap-2">
+                <div className="flex-1 relative">
+                  <textarea
+                    ref={inputRef}
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSubmit();
+                      }
+                    }}
+                    placeholder={projectId ? "Ask questions or give commands..." : "Select a project first..."}
+                    className="w-full min-h-[44px] max-h-[120px] overflow-y-auto resize-none rounded-lg border-2 border-input bg-background px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
+                    disabled={isExecuting}
+                    rows={1}
+                  />
+                </div>
+                
+                <div className="flex gap-1.5 shrink-0">
+                  {voiceSupported && (
+                    <Button
+                      type="button"
+                      variant={isListening ? 'destructive' : 'outline'}
+                      size="icon"
+                      onClick={isListening ? stopListening : startListening}
+                      disabled={isExecuting || voiceStatus === 'permission-denied'}
+                      title={voiceStatusMessage}
+                      className={cn(
+                        'h-11 w-11 transition-all rounded-lg',
+                        isListening && 'ring-2 ring-destructive ring-offset-2'
+                      )}
+                    >
+                      {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                    </Button>
                   )}
-                >
-                  {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                </Button>
-              )}
-              
-              <Button
-                type="submit"
-                size="icon"
-                disabled={!inputValue.trim() || isExecuting}
-                className="shrink-0"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-            </form>
+                  
+                  <Button
+                    type="submit"
+                    size="icon"
+                    disabled={!inputValue.trim() || isExecuting}
+                    className="h-11 w-11 rounded-lg"
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
+              </form>
+            </div>
             
           </TabsContent>
 
