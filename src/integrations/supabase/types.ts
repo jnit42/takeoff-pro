@@ -14,6 +14,124 @@ export type Database = {
   }
   public: {
     Tables: {
+      assemblies: {
+        Row: {
+          checklist_items: Json | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_system: boolean | null
+          items: Json | null
+          name: string
+          project_type: string
+          trade: string
+        }
+        Insert: {
+          checklist_items?: Json | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_system?: boolean | null
+          items?: Json | null
+          name: string
+          project_type: string
+          trade: string
+        }
+        Update: {
+          checklist_items?: Json | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_system?: boolean | null
+          items?: Json | null
+          name?: string
+          project_type?: string
+          trade?: string
+        }
+        Relationships: []
+      }
+      assumptions: {
+        Row: {
+          created_at: string
+          id: string
+          is_exclusion: boolean | null
+          notes: string | null
+          project_id: string
+          statement: string
+          status: string | null
+          trade: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_exclusion?: boolean | null
+          notes?: string | null
+          project_id: string
+          statement: string
+          status?: string | null
+          trade?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_exclusion?: boolean | null
+          notes?: string | null
+          project_id?: string
+          statement?: string
+          status?: string | null
+          trade?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assumptions_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      checklist_items: {
+        Row: {
+          created_at: string
+          id: string
+          item: string
+          notes: string | null
+          project_id: string
+          status: string | null
+          trade: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          item: string
+          notes?: string | null
+          project_id: string
+          status?: string | null
+          trade: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          item?: string
+          notes?: string | null
+          project_id?: string
+          status?: string | null
+          trade?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checklist_items_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       labor_estimates: {
         Row: {
           assumptions: Json | null
@@ -173,7 +291,9 @@ export type Database = {
           id: string
           notes: string | null
           project_id: string
+          scale: string | null
           sheet_label: string | null
+          sheet_title: string | null
           uploaded_at: string
         }
         Insert: {
@@ -182,7 +302,9 @@ export type Database = {
           id?: string
           notes?: string | null
           project_id: string
+          scale?: string | null
           sheet_label?: string | null
+          sheet_title?: string | null
           uploaded_at?: string
         }
         Update: {
@@ -191,7 +313,9 @@ export type Database = {
           id?: string
           notes?: string | null
           project_id?: string
+          scale?: string | null
           sheet_label?: string | null
+          sheet_title?: string | null
           uploaded_at?: string
         }
         Relationships: [
@@ -203,6 +327,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      price_book: {
+        Row: {
+          category: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          is_system: boolean | null
+          item_name: string
+          notes: string | null
+          unit: string
+          unit_cost: number | null
+          updated_at: string
+          vendor: string | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_system?: boolean | null
+          item_name: string
+          notes?: string | null
+          unit?: string
+          unit_cost?: number | null
+          updated_at?: string
+          vendor?: string | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_system?: boolean | null
+          item_name?: string
+          notes?: string | null
+          unit?: string
+          unit_cost?: number | null
+          updated_at?: string
+          vendor?: string | null
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -279,12 +445,57 @@ export type Database = {
         }
         Relationships: []
       }
+      rfis: {
+        Row: {
+          answer: string | null
+          created_at: string
+          id: string
+          notes: string | null
+          project_id: string
+          question: string
+          resolved_at: string | null
+          status: string | null
+          trade: string | null
+        }
+        Insert: {
+          answer?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          project_id: string
+          question: string
+          resolved_at?: string | null
+          status?: string | null
+          trade?: string | null
+        }
+        Update: {
+          answer?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          project_id?: string
+          question?: string
+          resolved_at?: string | null
+          status?: string | null
+          trade?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rfis_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       takeoff_items: {
         Row: {
           adjusted_qty: number | null
           category: string
           created_at: string
           description: string
+          draft: boolean | null
           extended_cost: number | null
           id: string
           notes: string | null
@@ -306,6 +517,7 @@ export type Database = {
           category: string
           created_at?: string
           description: string
+          draft?: boolean | null
           extended_cost?: number | null
           id?: string
           notes?: string | null
@@ -327,6 +539,7 @@ export type Database = {
           category?: string
           created_at?: string
           description?: string
+          draft?: boolean | null
           extended_cost?: number | null
           id?: string
           notes?: string | null
@@ -445,6 +658,41 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      wizard_runs: {
+        Row: {
+          answers: Json | null
+          created_at: string
+          id: string
+          project_id: string
+          project_type: string
+          status: string | null
+        }
+        Insert: {
+          answers?: Json | null
+          created_at?: string
+          id?: string
+          project_id: string
+          project_type: string
+          status?: string | null
+        }
+        Update: {
+          answers?: Json | null
+          created_at?: string
+          id?: string
+          project_id?: string
+          project_type?: string
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wizard_runs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
