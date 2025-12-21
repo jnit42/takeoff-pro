@@ -124,7 +124,7 @@ serve(async (req) => {
   }
 
   try {
-    const { message, projectContext } = await req.json();
+    const { message, projectContext, pendingActions, isFollowUp } = await req.json();
     
     if (!message || typeof message !== 'string') {
       return new Response(
@@ -251,11 +251,30 @@ Calculate immediately using these steps:
 3. Only ask about doors/windows if it significantly affects the estimate
 4. Include ALL related materials (if drywall, include mud/tape/screws)
 5. Separate line items by trade category
-6. For basement: always use PT bottom plate, include insulation if exterior walls`;
+6. For basement: always use PT bottom plate, include insulation if exterior walls
 
-    const userPrompt = `"${message}"
+## FOLLOW-UP HANDLING
+If the user is refining a previous proposal, incorporate their feedback:
+- If they question a quantity, explain your math clearly
+- If they want changes (e.g., "make it 24 on center"), recalculate and return updated actions
+- If they ask "why", explain without re-proposing (set actions to empty array)
+- Keep the conversation natural - they can refine multiple times before confirming`;
 
-Calculate quantities using the formulas. Be accurate and complete.`;
+    // Build user prompt based on context
+    let userPrompt = `"${message}"`;
+    
+    if (isFollowUp && pendingActions) {
+      userPrompt = `Current pending proposal:
+${pendingActions}
+
+User says: "${message}"
+
+If they're asking a question, answer it clearly. If they're requesting a change, recalculate and return updated actions. If explaining, set actions to empty array.`;
+    } else {
+      userPrompt += `\n\nCalculate quantities using the formulas. Be accurate and complete.`;
+    }
+
+    console.log('[AI Parse] Is follow-up:', isFollowUp);
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',

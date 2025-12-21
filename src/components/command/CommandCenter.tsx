@@ -177,6 +177,68 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
     // Add user message
     addMessage('user', commandText);
 
+    // Check if user is confirming pending actions
+    const confirmPhrases = /^(confirm|go ahead|looks good|do it|yes|execute|approve|that's right|perfect|ok|okay)$/i;
+    if (pendingActions && confirmPhrases.test(commandText.trim())) {
+      handleConfirmActions();
+      return;
+    }
+
+    // Check if user is canceling
+    const cancelPhrases = /^(cancel|never ?mind|stop|clear|start over|reset)$/i;
+    if (pendingActions && cancelPhrases.test(commandText.trim())) {
+      handleCancelActions();
+      return;
+    }
+
+    // If we have pending actions, send follow-up to AI with context
+    if (pendingActions) {
+      addMessage('system', '🔄 Updating proposal...');
+      
+      try {
+        const pendingContext = pendingActions.map(a => formatActionPreview(a)).join('\n');
+        
+        const { data, error } = await supabase.functions.invoke('ai-command-parse', {
+          body: { 
+            message: commandText,
+            projectContext: { projectId, projectType },
+            pendingActions: pendingContext,
+            isFollowUp: true
+          }
+        });
+
+        setMessages(prev => prev.slice(0, -1)); // Remove "Updating proposal" message
+
+        if (error) {
+          console.error('[AI Follow-up] Error:', error);
+          addMessage('system', "I couldn't process that. Try rephrasing or say 'confirm' when ready.");
+          return;
+        }
+
+        if (data.actions && data.actions.length > 0) {
+          // Update pending actions
+          const newActions = data.actions as unknown as ParsedAction[];
+          setPendingActions(newActions);
+          
+          const actionPreview = newActions
+            .map((a) => `• ${formatActionPreview(a)}`)
+            .join('\n');
+          
+          addMessage('preview', `Updated Proposal:\n${actionPreview}\n\n${data.message || 'Say "confirm" when ready, or keep refining.'}`, { actions: newActions });
+        } else if (data.message) {
+          // AI responded with explanation, not new actions
+          addMessage('system', data.message);
+        }
+        
+        return;
+      } catch (err) {
+        console.error('[AI Follow-up] Exception:', err);
+        setMessages(prev => prev.slice(0, -1));
+        addMessage('system', "Something went wrong. Try again or say 'confirm' to proceed with current proposal.");
+        return;
+      }
+    }
+
     // First try deterministic parser
     let result = parseCommand(commandText, { projectId, projectType });
 
@@ -192,7 +254,7 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
 
     // If deterministic parser failed, try AI parsing
     if (!result.success) {
-      addMessage('system', '🤔 Checking with AI...');
+      addMessage('system', '🤔 Thinking...');
       
       try {
         const { data, error } = await supabase.functions.invoke('ai-command-parse', {
@@ -204,9 +266,8 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
 
         if (error) {
           console.error('[AI Parse] Error:', error);
-          // Show original fallback
           if (result.suggestions && result.suggestions.length > 0) {
-            setMessages(prev => prev.slice(0, -1)); // Remove "Checking with AI" message
+            setMessages(prev => prev.slice(0, -1));
             addMessage('suggestion', result.error || "I couldn't understand that.", { suggestions: result.suggestions });
           } else {
             setMessages(prev => prev.slice(0, -1));
@@ -217,7 +278,6 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
 
         console.log('[AI Parse] Response:', data);
         
-        // Remove "Checking with AI" message
         setMessages(prev => prev.slice(0, -1));
 
         if (data.error) {
@@ -229,7 +289,6 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
         }
 
         if (data.success && data.actions && data.actions.length > 0) {
-          // AI successfully parsed - use those actions
           result = {
             success: true,
             actions: data.actions,
@@ -237,15 +296,19 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
             parserVersion: result.parserVersion + '+AI'
           };
           
-          // If there are follow-up questions, show them
-          if (data.followUpQuestions && data.followUpQuestions.length > 0) {
-            addMessage('system', `📝 ${data.followUpQuestions.join('\n')}`);
+          // Show AI message with follow-up questions if any
+          const aiMessage = data.message || '';
+          const questions = data.followUpQuestions?.length > 0 
+            ? '\n\n' + data.followUpQuestions.join('\n') 
+            : '';
+          
+          if (aiMessage || questions) {
+            addMessage('system', (aiMessage + questions).trim());
           }
         } else if (data.message) {
           addMessage('system', data.message);
           return;
         } else {
-          // AI also couldn't understand
           if (result.suggestions && result.suggestions.length > 0) {
             addMessage('suggestion', result.error || "I couldn't understand that.", { suggestions: result.suggestions });
           } else {
@@ -265,7 +328,7 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
       }
     }
 
-    // Show proposed actions for confirmation - cast to executor type
+    // Show proposed actions - cast to executor type
     const actions = result.actions as unknown as ParsedAction[];
     
     // Check if any action requires project context
@@ -281,7 +344,7 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
       .map((a) => `• ${formatActionPreview(a)}`)
       .join('\n');
     
-    addMessage('preview', `Proposed Actions:\n${actionPreview}`, { actions });
+    addMessage('preview', `Proposed:\n${actionPreview}\n\nAsk questions, request changes, or say "confirm" when ready.`, { actions });
   };
 
   const handleConfirmActions = async (skipMoneyCheck = false) => {
@@ -457,31 +520,31 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
               </div>
             </ScrollArea>
 
-            {/* Confirm/Cancel for pending actions */}
+            {/* Pending actions indicator - subtle, not blocking */}
             {pendingActions && (
-              <div className="flex gap-2 p-2 bg-warning/10 rounded-lg border border-warning/30">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-accent/10 border border-accent/30">
+                <Sparkles className="h-3 w-3 text-accent" />
+                <span className="flex-1 text-accent">
+                  {pendingActions.length} item{pendingActions.length > 1 ? 's' : ''} pending • Say "confirm" or keep refining
+                </span>
                 <Button
-                  variant="default"
+                  variant="ghost"
                   size="sm"
                   onClick={() => handleConfirmActions()}
                   disabled={isExecuting}
-                  className="flex-1"
+                  className="h-6 px-2 text-xs"
                 >
-                  {isExecuting ? (
-                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                  ) : (
-                    <Check className="h-4 w-4 mr-1" />
-                  )}
+                  {isExecuting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 mr-1" />}
                   Confirm
                 </Button>
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
                   onClick={handleCancelActions}
                   disabled={isExecuting}
+                  className="h-6 px-2 text-xs text-muted-foreground"
                 >
-                  <X className="h-4 w-4 mr-1" />
-                  Cancel
+                  <X className="h-3 w-3" />
                 </Button>
               </div>
             )}
