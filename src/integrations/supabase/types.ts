@@ -14,6 +14,56 @@ export type Database = {
   }
   public: {
     Tables: {
+      action_log: {
+        Row: {
+          actions_json: Json
+          command_text: string
+          created_at: string
+          error: string | null
+          id: string
+          project_id: string | null
+          source: string
+          status: string
+          undo_data: Json | null
+          undoable: boolean
+          user_id: string
+        }
+        Insert: {
+          actions_json?: Json
+          command_text: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          project_id?: string | null
+          source: string
+          status?: string
+          undo_data?: Json | null
+          undoable?: boolean
+          user_id?: string
+        }
+        Update: {
+          actions_json?: Json
+          command_text?: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          project_id?: string | null
+          source?: string
+          status?: string
+          undo_data?: Json | null
+          undoable?: boolean
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "action_log_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       assemblies: {
         Row: {
           checklist_items: Json | null
