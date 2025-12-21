@@ -10,7 +10,8 @@ import {
   EyeOff,
   CheckCircle2,
   FileUp,
-  Trash
+  Trash,
+  MapPin
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -19,6 +20,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { PlanLinkBadge } from './PlanLinkBadge';
+import { OverrideBadge } from './OverrideBadge';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import {
   Table,
   TableBody,
@@ -95,6 +99,45 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
       return data as TakeoffItem[];
     },
   });
+
+  // Fetch blueprint measurements for all items in this project
+  const { data: allMeasurements = [] } = useQuery({
+    queryKey: ['blueprint-measurements-project', projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('blueprint_measurements')
+        .select('id, takeoff_item_id, value, unit, plan_file_id, page_number')
+        .eq('project_id', projectId);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Fetch plan files for sheet labels
+  const { data: planFiles = [] } = useQuery({
+    queryKey: ['plan-files', projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('plan_files')
+        .select('id, sheet_label, filename')
+        .eq('project_id', projectId);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Build map of takeoff_item_id -> measurements with sheet labels
+  const measurementsByItem = allMeasurements.reduce((acc, m) => {
+    if (m.takeoff_item_id) {
+      if (!acc[m.takeoff_item_id]) acc[m.takeoff_item_id] = [];
+      const planFile = planFiles.find(p => p.id === m.plan_file_id);
+      acc[m.takeoff_item_id].push({
+        ...m,
+        sheet_label: planFile?.sheet_label || planFile?.filename || 'Plan'
+      });
+    }
+    return acc;
+  }, {} as Record<string, Array<typeof allMeasurements[0] & { sheet_label: string }>>);
 
   const addItemMutation = useMutation({
     mutationFn: async (category: string) => {
