@@ -66,11 +66,41 @@ const CONSTRUCTION_KNOWLEDGE = `
 - 4×8 sheets: 1400 × 1.10 ÷ 32 = 48 sheets
 - OR 4×12 sheets: 1400 × 1.10 ÷ 48 = 32 sheets
 
-### Drywall accessories (per 1000 SF)
-- Joint compound: 3-4 gallons (or 1 5-gal bucket per 500 SF)
-- Tape: 1 roll (500') per 500 SF
-- Screws: 1 lb per 100 SF (10 lbs per 1000 SF)
-- Corner bead: measure all outside corners LF
+### Drywall accessories - BE SPECIFIC with quantities
+**Joint compound:**
+- 1 five-gallon bucket per 400-500 SF
+- For 1000 SF: 2-3 buckets
+- Specify: "All-Purpose Joint Compound (5-gal)" or "Lightweight All-Purpose"
+
+**Tape:**
+- 1 roll (500') per 500 SF of drywall
+- For 1000 SF: 2 rolls
+- Specify: "Paper Drywall Tape (500' roll)"
+
+**Screws:**
+- 1 lb box covers ~100 SF
+- For 1000 SF: 10 boxes (1 lb each) or 2 boxes (5 lb each)
+- Specify: "Drywall Screws 1-1/4" (1 lb box)" for 1/2" drywall
+
+**Corner bead:**
+- 8 LF per corner × number of outside corners
+- 4 corners = 32 LF
+- Specify: "Metal Corner Bead (8' lengths)" - need 4 pieces for 32 LF
+
+**Sandpaper - CRITICAL for finishing:**
+- Drywall finishing requires 2 grits:
+  - 120-grit for first/second coat sanding
+  - 150 or 220-grit for final sanding
+- Quantity: 1 sheet per 50 SF of drywall, both grits
+- For 1000 SF: 20 sheets of 120-grit + 20 sheets of 220-grit
+- OR use sanding screens: 1 screen per 200 SF
+- Specify: "Drywall Sanding Sheets 120-grit (25-pack)" AND "Drywall Sanding Sheets 220-grit (25-pack)"
+- Pole sander head if doing ceilings
+
+**Mud pan and knife set:**
+- 1 set per job (reusable)
+- Include: 6" knife, 10" knife, 12" knife, mud pan
+- Specify if needed: "Drywall Knife Set (6/10/12 inch)"
 
 ## INSULATION
 
@@ -79,6 +109,7 @@ const CONSTRUCTION_KNOWLEDGE = `
 - Basement walls: R-13 typical, check local code
 - Coverage: 1 SF per 1 SF of wall, +5% waste
 - Kraft-faced for vapor barrier in basement
+- Specify: "R-13 Kraft-Faced Batt Insulation (3.5" × 15" × 93")"
 
 ## ELECTRICAL (basement typical)
 
@@ -93,6 +124,15 @@ const CONSTRUCTION_KNOWLEDGE = `
 - Perimeter = 100 LF
 - Outlets: 100 ÷ 12 = 9 outlets minimum
 
+## BE SPECIFIC - NOT VAGUE
+When adding items, ALWAYS include:
+1. Full product description (not just "sandpaper" → "Drywall Sanding Sheets 120-grit")
+2. Calculated quantity based on SF/LF (not just "1 pack")
+3. Unit size (25-pack, 5-gal bucket, 500' roll)
+
+**WRONG:** "Sandpaper: 1 PACK"
+**RIGHT:** "Drywall Sanding Sheets 120-grit (25-pack): 1 EA" AND "Drywall Sanding Sheets 220-grit (25-pack): 1 EA"
+
 ## COMMON MISTAKES TO AVOID
 
 1. Don't multiply studs × 3 for plates - plates are linear, not per-stud
@@ -100,6 +140,8 @@ const CONSTRUCTION_KNOWLEDGE = `
 3. Don't mix up LF and EA
 4. Bottom plate on concrete MUST be pressure treated
 5. Top plates are ALWAYS doubled (code requirement)
+6. Don't give vague quantities like "1 pack" - calculate based on SF
+7. Don't forget both grits of sandpaper for drywall finishing
 `;
 
 serve(async (req) => {
