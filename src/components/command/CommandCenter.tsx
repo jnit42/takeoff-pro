@@ -43,7 +43,7 @@ import { parseCommand, getCapabilities, PARSER_VERSION, type ParseSuggestion } f
 import { executeActions, undoAction, type ExecutionResult } from '@/lib/commandExecutor';
 import type { ParsedAction } from '@/lib/commandParser';
 import { ActionLogViewer } from './ActionLogViewer';
-import { MaterialList } from './MaterialListItem';
+import { MaterialList, type MaterialItem } from './MaterialListItem';
 import { cn } from '@/lib/utils';
 
 interface Message {
@@ -467,13 +467,13 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
   const voiceConfig = VOICE_STATUS_CONFIG[voiceStatus];
 
   // Extract material items from pending actions for display
-  const getPendingMaterialItems = () => {
+  const getPendingMaterialItems = (): MaterialItem[] => {
     if (!pendingActions) return [];
     
-    const items: Array<{ description: string; quantity: number; unit: string; category?: string }> = [];
+    const items: MaterialItem[] = [];
     for (const action of pendingActions) {
       if (action.type === 'takeoff.add_multiple' && action.params.items) {
-        const actionItems = action.params.items as Array<{ description: string; quantity: number; unit: string; category?: string }>;
+        const actionItems = action.params.items as MaterialItem[];
         items.push(...actionItems);
       } else if (action.type === 'takeoff.add_item') {
         items.push({
@@ -485,6 +485,54 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
       }
     }
     return items;
+  };
+
+  // Update an item in pending actions
+  const handleUpdatePendingItem = (index: number, updates: Partial<MaterialItem>) => {
+    if (!pendingActions) return;
+    
+    // Rebuild actions with updated item
+    const items = getPendingMaterialItems();
+    if (index < 0 || index >= items.length) return;
+    
+    const updatedItems = [...items];
+    updatedItems[index] = { ...updatedItems[index], ...updates };
+    
+    // Create a single add_multiple action with updated items
+    const newActions: ParsedAction[] = [{
+      type: 'takeoff.add_multiple',
+      params: { items: updatedItems },
+      confidence: 0.9,
+    }];
+    
+    setPendingActions(newActions);
+    addMessage('system', `Updated: ${updatedItems[index].description} → ${updatedItems[index].quantity} ${updatedItems[index].unit}`);
+  };
+
+  // Remove an item from pending actions
+  const handleRemovePendingItem = (index: number) => {
+    if (!pendingActions) return;
+    
+    const items = getPendingMaterialItems();
+    if (index < 0 || index >= items.length) return;
+    
+    const removedItem = items[index];
+    const updatedItems = items.filter((_, i) => i !== index);
+    
+    if (updatedItems.length === 0) {
+      // No items left, cancel pending actions
+      handleCancelActions();
+      return;
+    }
+    
+    const newActions: ParsedAction[] = [{
+      type: 'takeoff.add_multiple',
+      params: { items: updatedItems },
+      confidence: 0.9,
+    }];
+    
+    setPendingActions(newActions);
+    addMessage('system', `Removed: ${removedItem.description}`);
   };
 
   const pendingMaterialItems = getPendingMaterialItems();
@@ -619,16 +667,21 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
                   </div>
                 </div>
                 
-                {/* Material list - scrollable if many items */}
+                {/* Material list - scrollable and editable */}
                 {pendingMaterialItems.length > 0 && (
-                  <div className="max-h-48 sm:max-h-64 overflow-y-auto p-3 scrollbar-thin">
-                    <MaterialList items={pendingMaterialItems} />
+                  <div className="max-h-48 sm:max-h-64 overflow-y-auto p-2.5 scrollbar-thin">
+                    <MaterialList 
+                      items={pendingMaterialItems}
+                      onUpdate={handleUpdatePendingItem}
+                      onRemove={handleRemovePendingItem}
+                      editable={true}
+                    />
                   </div>
                 )}
                 
                 {/* Footer hint */}
                 <div className="px-3 py-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50/50 dark:bg-amber-950/30 border-t border-amber-200/50 dark:border-amber-800/50">
-                  💬 Refine by asking questions, or say "confirm" to add all
+                  💬 Type to add more items, tap to edit qty, or "confirm" when ready
                 </div>
               </div>
             )}
@@ -676,9 +729,10 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
                       }
                     }}
                     placeholder={projectId ? "Type or speak..." : "Select a project..."}
-                    className="w-full min-h-[44px] max-h-[100px] overflow-y-auto resize-none rounded-xl border border-input bg-background px-3 sm:px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
+                    className="w-full min-h-[44px] max-h-[100px] overflow-y-auto resize-none rounded-xl border border-input bg-background px-3 sm:px-4 py-3 text-base placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
                     disabled={isExecuting}
                     rows={1}
+                    style={{ fontSize: '16px' }}
                   />
                 </div>
                 
