@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Upload, FileText, Trash2, Loader2, File, Image, Eye, Ruler, PenTool } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -25,9 +25,11 @@ interface PlanFile {
 
 interface PlanFilesManagerProps {
   projectId: string;
+  /** Auto-open this plan file when provided (from Command Center navigation) */
+  planFileId?: string;
 }
 
-export function PlanFilesManager({ projectId }: PlanFilesManagerProps) {
+export function PlanFilesManager({ projectId, planFileId }: PlanFilesManagerProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -48,6 +50,16 @@ export function PlanFilesManager({ projectId }: PlanFilesManagerProps) {
       return data as PlanFile[];
     },
   });
+
+  // Auto-open plan file if planFileId is provided (from Command Center navigation)
+  useEffect(() => {
+    if (planFileId && planFiles.length > 0) {
+      const targetFile = planFiles.find((pf) => pf.id === planFileId);
+      if (targetFile && !viewerFile) {
+        setViewerFile(targetFile);
+      }
+    }
+  }, [planFileId, planFiles, viewerFile]);
 
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {

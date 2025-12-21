@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   ArrowLeft,
@@ -15,6 +15,7 @@ import {
   AlertCircle,
   ListChecks,
   Calculator,
+  Terminal,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -31,6 +32,7 @@ import { GCWizard } from '@/components/wizard/GCWizard';
 import { RFIsManager } from '@/components/wizard/RFIsManager';
 import { AssumptionsManager } from '@/components/wizard/AssumptionsManager';
 import { ChecklistManager } from '@/components/wizard/ChecklistManager';
+import { CommandCenter } from '@/components/command/CommandCenter';
 import { formatCurrency } from '@/lib/constants';
 import { 
   exportTakeoffCSV, 
@@ -45,9 +47,23 @@ import { useToast } from '@/hooks/use-toast';
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState('summary');
+  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'summary');
   const [showWizard, setShowWizard] = useState(false);
+
+  // Sync tab with URL params
+  useEffect(() => {
+    const tabFromUrl = searchParams.get('tab');
+    if (tabFromUrl && tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    setSearchParams({ tab });
+  };
 
   const { data: project, isLoading } = useQuery({
     queryKey: ['project', id],
@@ -297,9 +313,10 @@ export default function ProjectDetail() {
         </div>
 
         {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
           <TabsList className="flex-wrap">
             <TabsTrigger value="summary" className="gap-2"><Calculator className="h-4 w-4" />Summary</TabsTrigger>
+            <TabsTrigger value="command" className="gap-2"><Terminal className="h-4 w-4" />Command</TabsTrigger>
             <TabsTrigger value="wizard" className="gap-2"><Wand2 className="h-4 w-4" />Wizard</TabsTrigger>
             <TabsTrigger value="rfis" className="gap-2"><FileQuestion className="h-4 w-4" />RFIs</TabsTrigger>
             <TabsTrigger value="assumptions" className="gap-2"><AlertCircle className="h-4 w-4" />Assumptions</TabsTrigger>
@@ -312,6 +329,9 @@ export default function ProjectDetail() {
 
           <TabsContent value="summary">
             <CostSummary projectId={id!} project={project} />
+          </TabsContent>
+          <TabsContent value="command" className="h-[600px]">
+            <CommandCenter projectId={id!} projectType={undefined} className="h-full" />
           </TabsContent>
           <TabsContent value="wizard">
             <Card>
@@ -332,7 +352,7 @@ export default function ProjectDetail() {
           <TabsContent value="checklist"><ChecklistManager projectId={id!} /></TabsContent>
           <TabsContent value="takeoff"><TakeoffBuilder projectId={id!} project={project} /></TabsContent>
           <TabsContent value="labor"><LaborEstimator projectId={id!} project={project} /></TabsContent>
-          <TabsContent value="plans"><PlanFilesManager projectId={id!} /></TabsContent>
+          <TabsContent value="plans"><PlanFilesManager projectId={id!} planFileId={searchParams.get('planFileId') || undefined} /></TabsContent>
           <TabsContent value="settings"><ProjectSettings project={project} /></TabsContent>
         </Tabs>
       </div>

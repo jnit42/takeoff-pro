@@ -21,6 +21,8 @@ export interface ExecutionResult {
   data?: Record<string, unknown>;
   undoable: boolean;
   undoData?: Record<string, unknown>;
+  /** For navigation actions */
+  navigateTo?: string;
 }
 
 export interface ExecutionContext {
@@ -42,6 +44,10 @@ interface Assembly {
   trade: string;
   items: AssemblyItem[];
 }
+
+// Schema/parser version for action log
+export const LOG_SCHEMA_VERSION = 1;
+export const LOG_PARSER_VERSION = '1.0.0';
 
 /**
  * Execute a single action
@@ -82,6 +88,9 @@ export async function executeAction(
       case 'qa.show_issues':
         return await executeQAShowIssues(context);
 
+      case 'plans.open':
+        return await executePlansOpen(action.params, context);
+
       default:
         return {
           success: false,
@@ -101,7 +110,7 @@ export async function executeAction(
 }
 
 /**
- * Execute all actions and log to action_log
+ * Execute all actions and log to action_log with versioning
  */
 export async function executeActions(
   actions: ParsedAction[],
@@ -114,17 +123,25 @@ export async function executeActions(
     results.push(result);
   }
 
-  // Log to action_log
+  // Log to action_log with versioned schema
   const allSuccess = results.every(r => r.success);
   const undoData = results
     .filter(r => r.undoable && r.undoData)
     .map(r => ({ type: r.actionType, data: r.undoData }));
 
+  // Versioned actions_json structure
+  const versionedActionsJson = {
+    schema_version: LOG_SCHEMA_VERSION,
+    parser_version: LOG_PARSER_VERSION,
+    executed_at: new Date().toISOString(),
+    actions: actions,
+  };
+
   const insertData = {
     project_id: context.projectId || null,
     source: context.source,
     command_text: context.commandText,
-    actions_json: actions as unknown as Record<string, unknown>,
+    actions_json: versionedActionsJson as unknown as Record<string, unknown>,
     status: allSuccess ? 'applied' : 'failed',
     error: allSuccess ? null : results.find(r => !r.success)?.message,
     undoable: undoData.length > 0,
@@ -141,6 +158,60 @@ export async function executeActions(
   return {
     results,
     logId: logError ? null : logEntry?.id || null,
+  };
+}
+
+/**
+ * Execute plans.open - returns navigation data
+ */
+async function executePlansOpen(
+  params: Record<string, unknown>,
+  context: ExecutionContext
+): Promise<ExecutionResult> {
+  if (!context.projectId) {
+    throw new Error('No project selected. Please open a project first.');
+  }
+
+  const planFileId = params.plan_file_id as string | undefined;
+  const sheetLabel = params.sheet_label as string | undefined;
+  const page = params.page as number | undefined;
+
+  // If we have a sheet label, try to find the plan file
+  let targetPlanFileId = planFileId;
+  
+  if (!targetPlanFileId && sheetLabel) {
+    const { data: planFiles } = await supabase
+      .from('plan_files')
+      .select('id, sheet_label, filename')
+      .eq('project_id', context.projectId);
+    
+    const match = planFiles?.find(
+      (pf) =>
+        pf.sheet_label?.toLowerCase() === sheetLabel.toLowerCase() ||
+        pf.filename.toLowerCase().includes(sheetLabel.toLowerCase())
+    );
+    
+    if (match) {
+      targetPlanFileId = match.id;
+    }
+  }
+
+  // Build navigation URL
+  let navigateTo = `/projects/${context.projectId}?tab=plans`;
+  if (targetPlanFileId) {
+    navigateTo += `&planFileId=${targetPlanFileId}`;
+  }
+  if (page) {
+    navigateTo += `&page=${page}`;
+  }
+
+  return {
+    success: true,
+    actionType: 'plans.open',
+    message: targetPlanFileId ? 'Opening plan...' : 'Opening plans tab...',
+    data: { plan_file_id: targetPlanFileId, page },
+    undoable: false,
+    navigateTo,
   };
 }
 
