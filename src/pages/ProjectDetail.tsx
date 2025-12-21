@@ -14,26 +14,39 @@ import {
   FileQuestion,
   AlertCircle,
   ListChecks,
+  Calculator,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { TakeoffBuilder } from '@/components/takeoff/TakeoffBuilder';
 import { LaborEstimator } from '@/components/labor/LaborEstimator';
 import { PlanFilesManager } from '@/components/plans/PlanFilesManager';
 import { ProjectSettings } from '@/components/project/ProjectSettings';
+import { CostSummary } from '@/components/project/CostSummary';
 import { GCWizard } from '@/components/wizard/GCWizard';
 import { RFIsManager } from '@/components/wizard/RFIsManager';
 import { AssumptionsManager } from '@/components/wizard/AssumptionsManager';
 import { ChecklistManager } from '@/components/wizard/ChecklistManager';
 import { formatCurrency } from '@/lib/constants';
+import { 
+  exportTakeoffCSV, 
+  exportLaborCSV, 
+  exportRFIsCSV, 
+  exportAssumptionsCSV, 
+  exportChecklistCSV,
+  exportProjectPDF 
+} from '@/lib/exportUtils';
+import { useToast } from '@/hooks/use-toast';
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('wizard');
+  const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState('summary');
   const [showWizard, setShowWizard] = useState(false);
 
   const { data: project, isLoading } = useQuery({
@@ -49,7 +62,7 @@ export default function ProjectDetail() {
     },
   });
 
-  const { data: takeoffItems } = useQuery({
+  const { data: takeoffItems = [] } = useQuery({
     queryKey: ['takeoff-items', id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -58,11 +71,11 @@ export default function ProjectDetail() {
         .eq('project_id', id)
         .order('sort_order');
       if (error) throw error;
-      return data;
+      return data || [];
     },
   });
 
-  const { data: laborEstimates } = useQuery({
+  const { data: laborEstimates = [] } = useQuery({
     queryKey: ['labor-estimates', id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -70,11 +83,11 @@ export default function ProjectDetail() {
         .select('*, labor_line_items(*)')
         .eq('project_id', id);
       if (error) throw error;
-      return data;
+      return data || [];
     },
   });
 
-  const { data: rfis } = useQuery({
+  const { data: rfis = [] } = useQuery({
     queryKey: ['rfis', id],
     queryFn: async () => {
       const { data } = await supabase.from('rfis').select('*').eq('project_id', id);
@@ -82,13 +95,66 @@ export default function ProjectDetail() {
     },
   });
 
-  const { data: checklistItems } = useQuery({
+  const { data: assumptions = [] } = useQuery({
+    queryKey: ['assumptions', id],
+    queryFn: async () => {
+      const { data } = await supabase.from('assumptions').select('*').eq('project_id', id);
+      return data || [];
+    },
+  });
+
+  const { data: checklistItems = [] } = useQuery({
     queryKey: ['checklist-items', id],
     queryFn: async () => {
       const { data } = await supabase.from('checklist_items').select('*').eq('project_id', id);
       return data || [];
     },
   });
+
+  // Export handlers
+  const handleExportPDF = () => {
+    if (!project) return;
+    exportProjectPDF({
+      project,
+      takeoffItems,
+      laborEstimates,
+      rfis,
+      assumptions,
+      checklistItems,
+      includeDrafts: false,
+    });
+    toast({ title: 'PDF exported successfully' });
+  };
+
+  const handleExportTakeoffCSV = (includeDrafts: boolean) => {
+    if (!project) return;
+    exportTakeoffCSV(takeoffItems, project.name, includeDrafts);
+    toast({ title: 'Takeoff CSV exported' });
+  };
+
+  const handleExportLaborCSV = () => {
+    if (!project) return;
+    exportLaborCSV(laborEstimates, project.name);
+    toast({ title: 'Labor CSV exported' });
+  };
+
+  const handleExportRFIsCSV = () => {
+    if (!project) return;
+    exportRFIsCSV(rfis, project.name);
+    toast({ title: 'RFIs CSV exported' });
+  };
+
+  const handleExportAssumptionsCSV = () => {
+    if (!project) return;
+    exportAssumptionsCSV(assumptions, project.name);
+    toast({ title: 'Assumptions CSV exported' });
+  };
+
+  const handleExportChecklistCSV = () => {
+    if (!project) return;
+    exportChecklistCSV(checklistItems, project.name);
+    toast({ title: 'Checklist CSV exported' });
+  };
 
   const materialSubtotal = takeoffItems?.reduce((sum, item) => sum + (Number(item.extended_cost) || 0), 0) || 0;
   const tax = materialSubtotal * ((project?.tax_percent || 0) / 100);
@@ -136,10 +202,46 @@ export default function ProjectDetail() {
             <Wand2 className="h-4 w-4 mr-2" />
             Run GC Wizard
           </Button>
-          <Button variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            Export PDF
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <Download className="h-4 w-4 mr-2" />
+                Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleExportPDF}>
+                <FileText className="h-4 w-4 mr-2" />
+                Export PDF (Full Estimate)
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => handleExportTakeoffCSV(false)}>
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                Takeoff CSV (Active Only)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExportTakeoffCSV(true)}>
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                Takeoff CSV (Include Drafts)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportLaborCSV}>
+                <Users className="h-4 w-4 mr-2" />
+                Labor CSV
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleExportRFIsCSV}>
+                <FileQuestion className="h-4 w-4 mr-2" />
+                RFIs CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportAssumptionsCSV}>
+                <AlertCircle className="h-4 w-4 mr-2" />
+                Assumptions CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportChecklistCSV}>
+                <ListChecks className="h-4 w-4 mr-2" />
+                Checklist CSV
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {/* Wizard Modal */}
@@ -197,6 +299,7 @@ export default function ProjectDetail() {
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="flex-wrap">
+            <TabsTrigger value="summary" className="gap-2"><Calculator className="h-4 w-4" />Summary</TabsTrigger>
             <TabsTrigger value="wizard" className="gap-2"><Wand2 className="h-4 w-4" />Wizard</TabsTrigger>
             <TabsTrigger value="rfis" className="gap-2"><FileQuestion className="h-4 w-4" />RFIs</TabsTrigger>
             <TabsTrigger value="assumptions" className="gap-2"><AlertCircle className="h-4 w-4" />Assumptions</TabsTrigger>
@@ -207,6 +310,9 @@ export default function ProjectDetail() {
             <TabsTrigger value="settings" className="gap-2"><Settings className="h-4 w-4" />Settings</TabsTrigger>
           </TabsList>
 
+          <TabsContent value="summary">
+            <CostSummary projectId={id!} project={project} />
+          </TabsContent>
           <TabsContent value="wizard">
             <Card>
               <CardHeader>
