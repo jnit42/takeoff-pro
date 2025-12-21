@@ -1,11 +1,24 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2, Save, Loader2, Calculator, ChevronDown } from 'lucide-react';
+import { 
+  Plus, 
+  Trash2, 
+  Loader2, 
+  Calculator, 
+  ChevronDown,
+  Eye,
+  EyeOff,
+  CheckCircle2,
+  FileUp,
+  Trash
+} from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Table,
   TableBody,
@@ -19,6 +32,17 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { TAKEOFF_CATEGORIES, UNITS, formatCurrency, formatNumber } from '@/lib/constants';
 
@@ -39,6 +63,7 @@ interface TakeoffItem {
   phase: string | null;
   notes: string | null;
   sort_order: number | null;
+  draft: boolean | null;
 }
 
 interface TakeoffBuilderProps {
@@ -53,6 +78,8 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [showDrafts, setShowDrafts] = useState(true);
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['takeoff-items', projectId],
@@ -80,6 +107,7 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
           unit: 'EA',
           quantity: 0,
           waste_percent: project.waste_percent || 10,
+          draft: false,
         })
         .select()
         .single();
@@ -116,12 +144,68 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['takeoff-items', projectId] });
+      setSelectedItems(prev => {
+        const next = new Set(prev);
+        next.clear();
+        return next;
+      });
       toast({ title: 'Item deleted' });
     },
   });
 
+  const promoteDraftsMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { error } = await supabase
+        .from('takeoff_items')
+        .update({ draft: false })
+        .in('id', ids);
+
+      if (error) throw error;
+    },
+    onSuccess: (_, ids) => {
+      queryClient.invalidateQueries({ queryKey: ['takeoff-items', projectId] });
+      setSelectedItems(new Set());
+      toast({ title: `Promoted ${ids.length} items to active` });
+    },
+    onError: (error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const deleteDraftsMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { error } = await supabase
+        .from('takeoff_items')
+        .delete()
+        .in('id', ids);
+
+      if (error) throw error;
+    },
+    onSuccess: (_, ids) => {
+      queryClient.invalidateQueries({ queryKey: ['takeoff-items', projectId] });
+      setSelectedItems(new Set());
+      toast({ title: `Deleted ${ids.length} items` });
+    },
+    onError: (error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  // Filter items based on draft visibility
+  const filteredItems = showDrafts ? items : items.filter(item => !item.draft);
+  
+  // Count drafts and active
+  const draftCount = items.filter(item => item.draft).length;
+  const activeCount = items.filter(item => !item.draft).length;
+
+  // Get draft items for bulk actions
+  const draftItems = items.filter(item => item.draft);
+  const selectedDrafts = Array.from(selectedItems).filter(id => 
+    draftItems.some(item => item.id === id)
+  );
+
   // Group items by category
-  const itemsByCategory = items.reduce((acc, item) => {
+  const itemsByCategory = filteredItems.reduce((acc, item) => {
     if (!acc[item.category]) {
       acc[item.category] = [];
     }
@@ -139,6 +223,24 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
     setExpandedCategories(newExpanded);
   };
 
+  const toggleSelectItem = (id: string) => {
+    const newSelected = new Set(selectedItems);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedItems(newSelected);
+  };
+
+  const selectAllDrafts = () => {
+    setSelectedItems(new Set(draftItems.map(item => item.id)));
+  };
+
+  const clearSelection = () => {
+    setSelectedItems(new Set());
+  };
+
   const handleInputChange = (
     id: string,
     field: keyof TakeoffItem,
@@ -149,14 +251,43 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
     updateItemMutation.mutate({ id, updates: { [field]: finalValue } });
   };
 
-  // Calculate totals
-  const subtotal = items.reduce((sum, item) => sum + (Number(item.extended_cost) || 0), 0);
+  const handlePromoteSelected = () => {
+    if (selectedDrafts.length > 0) {
+      promoteDraftsMutation.mutate(selectedDrafts);
+    }
+  };
+
+  const handlePromoteAll = () => {
+    const allDraftIds = draftItems.map(item => item.id);
+    if (allDraftIds.length > 0) {
+      promoteDraftsMutation.mutate(allDraftIds);
+    }
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedDrafts.length > 0) {
+      deleteDraftsMutation.mutate(selectedDrafts);
+    }
+  };
+
+  const handleDeleteAllDrafts = () => {
+    const allDraftIds = draftItems.map(item => item.id);
+    if (allDraftIds.length > 0) {
+      deleteDraftsMutation.mutate(allDraftIds);
+    }
+  };
+
+  // Calculate totals (only for active items)
+  const activeItems = items.filter(item => !item.draft);
+  const subtotal = activeItems.reduce((sum, item) => sum + (Number(item.extended_cost) || 0), 0);
   const tax = subtotal * ((project.tax_percent || 0) / 100);
   const total = subtotal + tax;
 
   // Calculate category totals
   const categoryTotals = Object.entries(itemsByCategory).reduce((acc, [cat, catItems]) => {
-    acc[cat] = catItems.reduce((sum, item) => sum + (Number(item.extended_cost) || 0), 0);
+    acc[cat] = catItems
+      .filter(item => !item.draft)
+      .reduce((sum, item) => sum + (Number(item.extended_cost) || 0), 0);
     return acc;
   }, {} as Record<string, number>);
 
@@ -170,6 +301,131 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
 
   return (
     <div className="space-y-6">
+      {/* Draft Management Bar */}
+      {draftCount > 0 && (
+        <Card className="border-warning/50 bg-warning/5">
+          <CardContent className="py-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <Badge variant="outline" className="bg-warning/20 text-warning border-warning/50">
+                  {draftCount} Draft{draftCount !== 1 ? 's' : ''}
+                </Badge>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowDrafts(!showDrafts)}
+                  className="gap-2"
+                >
+                  {showDrafts ? (
+                    <>
+                      <EyeOff className="h-4 w-4" />
+                      Hide Drafts
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="h-4 w-4" />
+                      Show Drafts
+                    </>
+                  )}
+                </Button>
+                {showDrafts && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={selectAllDrafts}
+                    >
+                      Select All Drafts
+                    </Button>
+                    {selectedItems.size > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={clearSelection}
+                      >
+                        Clear ({selectedItems.size})
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
+              
+              <div className="flex items-center gap-2">
+                {selectedDrafts.length > 0 ? (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="accent"
+                      onClick={handlePromoteSelected}
+                      disabled={promoteDraftsMutation.isPending}
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-1" />
+                      Promote Selected ({selectedDrafts.length})
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button size="sm" variant="destructive">
+                          <Trash className="h-4 w-4 mr-1" />
+                          Delete Selected
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete {selectedDrafts.length} draft items?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This action cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleDeleteSelected}>
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="accent"
+                      onClick={handlePromoteAll}
+                      disabled={promoteDraftsMutation.isPending || draftCount === 0}
+                    >
+                      <FileUp className="h-4 w-4 mr-1" />
+                      Promote All Drafts
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button size="sm" variant="outline" className="text-destructive">
+                          <Trash className="h-4 w-4 mr-1" />
+                          Delete All Drafts
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete all {draftCount} draft items?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This action cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleDeleteAllDrafts}>
+                            Delete All
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Add Item Section */}
       <Card>
         <CardHeader className="pb-3">
@@ -221,7 +477,9 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
             <Calculator className="h-12 w-12 text-muted-foreground mb-4" />
             <h3 className="font-semibold mb-1">No takeoff items yet</h3>
             <p className="text-muted-foreground text-center max-w-sm">
-              Add your first line item by selecting a category above.
+              {draftCount > 0 && !showDrafts 
+                ? `You have ${draftCount} draft items hidden. Click "Show Drafts" to see them.`
+                : 'Add your first line item by selecting a category above, or run the GC Wizard to generate items from your project scope.'}
             </p>
           </CardContent>
         </Card>
@@ -243,10 +501,15 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                             expandedCategories.has(category) ? '' : '-rotate-90'
                           }`}
                         />
-                        <div>
+                        <div className="flex items-center gap-2">
                           <CardTitle className="text-base">{category}</CardTitle>
-                          <CardDescription>{catItems.length} items</CardDescription>
+                          {catItems.some(item => item.draft) && (
+                            <Badge variant="outline" className="bg-warning/20 text-warning border-warning/50 text-xs">
+                              {catItems.filter(item => item.draft).length} draft
+                            </Badge>
+                          )}
                         </div>
+                        <CardDescription>{catItems.length} items</CardDescription>
                       </div>
                       <span className="font-mono text-lg font-semibold">
                         {formatCurrency(categoryTotals[category])}
@@ -260,6 +523,9 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                       <Table>
                         <TableHeader>
                           <TableRow>
+                            {showDrafts && draftCount > 0 && (
+                              <TableHead className="w-[40px]"></TableHead>
+                            )}
                             <TableHead className="w-[200px]">Description</TableHead>
                             <TableHead className="w-[100px]">Spec</TableHead>
                             <TableHead className="w-[80px]">Unit</TableHead>
@@ -276,15 +542,35 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                         </TableHeader>
                         <TableBody>
                           {catItems.map((item) => (
-                            <TableRow key={item.id}>
+                            <TableRow 
+                              key={item.id}
+                              className={item.draft ? 'bg-warning/5' : ''}
+                            >
+                              {showDrafts && draftCount > 0 && (
+                                <TableCell>
+                                  {item.draft && (
+                                    <Checkbox
+                                      checked={selectedItems.has(item.id)}
+                                      onCheckedChange={() => toggleSelectItem(item.id)}
+                                    />
+                                  )}
+                                </TableCell>
+                              )}
                               <TableCell>
-                                <Input
-                                  value={item.description}
-                                  onChange={(e) =>
-                                    handleInputChange(item.id, 'description', e.target.value)
-                                  }
-                                  className="h-8"
-                                />
+                                <div className="flex items-center gap-2">
+                                  {item.draft && (
+                                    <Badge variant="outline" className="bg-warning/20 text-warning border-warning/50 text-xs shrink-0">
+                                      Draft
+                                    </Badge>
+                                  )}
+                                  <Input
+                                    value={item.description}
+                                    onChange={(e) =>
+                                      handleInputChange(item.id, 'description', e.target.value)
+                                    }
+                                    className="h-8"
+                                  />
+                                </div>
                               </TableCell>
                               <TableCell>
                                 <Input
@@ -378,9 +664,9 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                               <TableCell>
                                 <Button
                                   variant="ghost"
-                                  size="icon-sm"
+                                  size="icon"
                                   onClick={() => deleteItemMutation.mutate(item.id)}
-                                  className="text-muted-foreground hover:text-destructive"
+                                  className="text-muted-foreground hover:text-destructive h-8 w-8"
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
@@ -399,11 +685,22 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
       )}
 
       {/* Summary */}
-      {items.length > 0 && (
+      {activeCount > 0 && (
         <Card>
           <CardContent className="pt-6">
             <div className="flex justify-end">
               <div className="w-64 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Active Items</span>
+                  <span className="font-mono">{activeCount}</span>
+                </div>
+                {draftCount > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Draft Items</span>
+                    <span className="font-mono text-warning">{draftCount}</span>
+                  </div>
+                )}
+                <div className="border-t pt-2 mt-2" />
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
                   <span className="font-mono">{formatCurrency(subtotal)}</span>
