@@ -18,6 +18,13 @@ interface ActionLogViewerProps {
   className?: string;
 }
 
+interface VersionedActionsJson {
+  schema_version?: number;
+  parser_version?: string;
+  executed_at?: string;
+  actions?: unknown[];
+}
+
 interface ActionLog {
   id: string;
   created_at: string;
@@ -25,7 +32,7 @@ interface ActionLog {
   command_text: string;
   status: string;
   undoable: boolean;
-  actions_json: unknown;
+  actions_json: VersionedActionsJson | unknown;
   error: string | null;
 }
 
@@ -81,6 +88,11 @@ export function ActionLogViewer({ projectId, onUndo, className }: ActionLogViewe
           const SourceIcon = SOURCE_ICONS[log.source as keyof typeof SOURCE_ICONS] || Keyboard;
           const isExpanded = expandedId === log.id;
 
+          // Extract version info from actions_json
+          const actionsJson = log.actions_json as VersionedActionsJson | null;
+          const schemaVersion = actionsJson?.schema_version;
+          const parserVersion = actionsJson?.parser_version;
+
           return (
             <div
               key={log.id}
@@ -117,6 +129,11 @@ export function ActionLogViewer({ projectId, onUndo, className }: ActionLogViewe
                     >
                       {log.status}
                     </Badge>
+                    {parserVersion && (
+                      <span className="text-[10px] text-muted-foreground">
+                        v{parserVersion}
+                      </span>
+                    )}
                   </div>
                   <p className="truncate font-medium">{log.command_text}</p>
 

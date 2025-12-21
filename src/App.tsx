@@ -11,6 +11,7 @@ import Templates from "./pages/Templates";
 import RateLibrary from "./pages/RateLibrary";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
+import CommandCenterPage from "./pages/CommandCenterPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -44,6 +45,7 @@ function AppRoutes() {
       <Route path="/rate-library" element={<ProtectedRoute><RateLibrary /></ProtectedRoute>} />
       <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+      <Route path="/command-center" element={<ProtectedRoute><CommandCenterPage /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

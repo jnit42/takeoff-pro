@@ -4,6 +4,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Send,
@@ -17,6 +18,7 @@ import {
   AlertCircle,
   History,
   HelpCircle,
+  AlertTriangle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +26,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useVoiceInput, type VoiceStatus } from '@/hooks/useVoiceInput';
@@ -65,10 +77,14 @@ const VOICE_STATUS_STYLES: Record<VoiceStatus, { color: string; pulse: boolean }
   'permission-denied': { color: 'bg-destructive', pulse: false },
 };
 
+// Money-impact action types that need stronger confirmation
+const MONEY_IMPACT_ACTIONS = ['takeoff.promote_drafts', 'takeoff.delete_drafts', 'export.pdf', 'export.csv'];
+
 export function CommandCenter({ projectId, projectType, className }: CommandCenterProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<'chat' | 'history'>('chat');
   const [messages, setMessages] = useState<Message[]>([
@@ -85,6 +101,7 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
   const [pendingActions, setPendingActions] = useState<ParsedAction[] | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [source, setSource] = useState<'text' | 'voice'>('text');
+  const [showMoneyConfirm, setShowMoneyConfirm] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -172,10 +189,18 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
     addMessage('preview', `Proposed Actions:\n${actionPreview}`, { actions });
   };
 
-  const handleConfirmActions = async () => {
+  const handleConfirmActions = async (skipMoneyCheck = false) => {
     if (!pendingActions || !user) return;
 
+    // Check for money-impact actions
+    const hasMoneyImpact = pendingActions.some(a => MONEY_IMPACT_ACTIONS.includes(a.type));
+    if (hasMoneyImpact && !skipMoneyCheck) {
+      setShowMoneyConfirm(true);
+      return;
+    }
+
     setIsExecuting(true);
+    setShowMoneyConfirm(false);
 
     try {
       const { results, logId } = await executeActions(pendingActions, {
@@ -191,6 +216,12 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
       );
 
       addMessage('system', resultMessages.join('\n'), { results, logId: logId || undefined });
+
+      // Handle navigation if any result has navigateTo
+      const navResult = results.find(r => r.navigateTo);
+      if (navResult?.navigateTo) {
+        navigate(navResult.navigateTo);
+      }
 
       // Invalidate relevant queries
       invalidateQueries();
@@ -310,7 +341,7 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
                 <Button
                   variant="default"
                   size="sm"
-                  onClick={handleConfirmActions}
+                  onClick={() => handleConfirmActions()}
                   disabled={isExecuting}
                   className="flex-1"
                 >
@@ -418,6 +449,28 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
           </TabsContent>
         </CardContent>
       </Tabs>
+
+      {/* Money-impact confirmation dialog */}
+      <AlertDialog open={showMoneyConfirm} onOpenChange={setShowMoneyConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-warning" />
+              Confirm Action
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This action affects your project data (promote drafts, delete items, or export). 
+              Are you sure you want to proceed?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => handleConfirmActions(true)}>
+              Yes, Proceed
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
