@@ -1,5 +1,6 @@
 /**
  * Voice Input Hook - Enhanced with status, push-to-talk, error handling
+ * Fixed: stable recognition instance, proper event handling
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -8,6 +9,7 @@ export type VoiceStatus = 'idle' | 'listening' | 'processing' | 'error' | 'not-s
 
 interface UseVoiceInputOptions {
   onResult?: (transcript: string) => void;
+  onInterim?: (transcript: string) => void;
   onError?: (error: string) => void;
   onStatusChange?: (status: VoiceStatus) => void;
   language?: string;
@@ -75,16 +77,16 @@ interface SpeechRecognitionErrorEvent {
 }
 
 const STATUS_MESSAGES: Record<VoiceStatus, string> = {
-  idle: 'Click to speak',
-  listening: 'Listening... speak now',
+  idle: 'Click mic to speak',
+  listening: '🎤 Listening... speak now',
   processing: 'Processing...',
   error: 'Error occurred',
-  'not-supported': 'Voice not supported in this browser. Try Chrome.',
-  'permission-denied': 'Microphone access denied. Please allow in browser settings.',
+  'not-supported': 'Voice not supported. Try Chrome.',
+  'permission-denied': 'Microphone blocked. Enable in browser settings.',
 };
 
 export function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInputReturn {
-  const { onResult, onError, onStatusChange, language = 'en-US', autoPunctuation = true } = options;
+  const { onResult, onInterim, onError, onStatusChange, language = 'en-US', autoPunctuation = true } = options;
   
   const [status, setStatus] = useState<VoiceStatus>(() => {
     if (!SpeechRecognition) return 'not-supported';
@@ -92,26 +94,43 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInput
   });
   const [transcript, setTranscript] = useState('');
   const [interimTranscript, setInterimTranscript] = useState('');
+  
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const statusRef = useRef<VoiceStatus>(status);
+  
+  // Keep refs in sync with latest callbacks to avoid stale closures
+  const callbacksRef = useRef({ onResult, onInterim, onError, onStatusChange });
+  callbacksRef.current = { onResult, onInterim, onError, onStatusChange };
 
   const isSupported = Boolean(SpeechRecognition);
   const isListening = status === 'listening';
 
+  // Update status helper
   const updateStatus = useCallback((newStatus: VoiceStatus) => {
+    statusRef.current = newStatus;
     setStatus(newStatus);
-    onStatusChange?.(newStatus);
-  }, [onStatusChange]);
+    callbacksRef.current.onStatusChange?.(newStatus);
+  }, []);
 
+  // Initialize recognition ONCE on mount
   useEffect(() => {
     if (!SpeechRecognition) {
       updateStatus('not-supported');
       return;
     }
 
+    console.log('[Voice] Initializing SpeechRecognition...');
     const recognition = new SpeechRecognition() as SpeechRecognitionInstance;
-    recognition.continuous = false;
+    recognition.continuous = true; // Keep listening until stopped
     recognition.interimResults = true;
     recognition.lang = language;
+
+    recognition.onstart = () => {
+      console.log('[Voice] Recognition started');
+      updateStatus('listening');
+      setTranscript('');
+      setInterimTranscript('');
+    };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let finalTranscript = '';
@@ -119,31 +138,33 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInput
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
+        const text = result[0].transcript;
+        
         if (result.isFinal) {
-          finalTranscript += result[0].transcript;
+          finalTranscript += text;
         } else {
-          interim += result[0].transcript;
+          interim += text;
         }
       }
 
+      // Always update interim for live display
       setInterimTranscript(interim);
+      callbacksRef.current.onInterim?.(interim);
+      
+      console.log('[Voice] Result:', { final: finalTranscript, interim });
 
       if (finalTranscript) {
-        // Auto-punctuation: add period if missing at end
         let processed = finalTranscript.trim();
         if (autoPunctuation && processed.length > 0 && !/[.!?]$/.test(processed)) {
           processed += '.';
         }
         setTranscript(processed);
-
-        if (onResult) {
-          onResult(processed);
-        }
+        callbacksRef.current.onResult?.(processed);
       }
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      console.error('Speech recognition error:', event.error);
+      console.error('[Voice] Error:', event.error);
       
       let errorStatus: VoiceStatus = 'error';
       let message = 'Speech recognition error';
@@ -155,73 +176,94 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInput
           break;
         case 'no-speech':
           message = 'No speech detected. Please try again.';
-          updateStatus('idle');
-          break;
+          // Don't change status for no-speech, just notify
+          callbacksRef.current.onError?.(message);
+          return;
         case 'network':
           message = 'Network error. Please check your connection.';
           break;
         case 'aborted':
-          message = 'Speech recognition stopped.';
-          updateStatus('idle');
+          // User stopped - not an error
           return;
         default:
           message = event.message || 'Speech recognition error';
       }
 
       updateStatus(errorStatus);
-      
-      if (onError) {
-        onError(message);
-      }
+      callbacksRef.current.onError?.(message);
     };
+
     recognition.onend = () => {
-      if (status !== 'permission-denied' && status !== 'not-supported') {
+      console.log('[Voice] Recognition ended, current status:', statusRef.current);
+      // Only reset to idle if not already in an error state
+      if (statusRef.current === 'listening' || statusRef.current === 'processing') {
         updateStatus('idle');
       }
       setInterimTranscript('');
     };
 
-    recognition.onstart = () => {
-      updateStatus('listening');
-      setTranscript('');
-      setInterimTranscript('');
-    };
-
     recognitionRef.current = recognition;
+    console.log('[Voice] Recognition initialized successfully');
 
     return () => {
+      console.log('[Voice] Cleaning up recognition');
       recognition.abort();
     };
-  }, [language, onResult, onError, autoPunctuation, updateStatus, status]);
+  }, [language, autoPunctuation, updateStatus]); // Removed status from deps!
 
   const startListening = useCallback(() => {
-    if (!recognitionRef.current || isListening) return;
-    
-    try {
-      recognitionRef.current.start();
-    } catch (error) {
-      console.error('Failed to start speech recognition:', error);
-      updateStatus('error');
+    const recognition = recognitionRef.current;
+    if (!recognition) {
+      console.warn('[Voice] No recognition instance');
+      return;
     }
-  }, [isListening, updateStatus]);
+    
+    if (statusRef.current === 'listening') {
+      console.log('[Voice] Already listening');
+      return;
+    }
+    
+    console.log('[Voice] Starting...');
+    try {
+      recognition.start();
+    } catch (error) {
+      console.error('[Voice] Failed to start:', error);
+      // If already started, try to stop and restart
+      if (error instanceof Error && error.message.includes('already started')) {
+        recognition.stop();
+        setTimeout(() => {
+          try {
+            recognition.start();
+          } catch (e) {
+            console.error('[Voice] Retry failed:', e);
+            updateStatus('error');
+          }
+        }, 100);
+      } else {
+        updateStatus('error');
+      }
+    }
+  }, [updateStatus]);
 
   const stopListening = useCallback(() => {
-    if (!recognitionRef.current || !isListening) return;
+    const recognition = recognitionRef.current;
+    if (!recognition) return;
     
+    console.log('[Voice] Stopping...');
     try {
-      recognitionRef.current.stop();
+      recognition.stop();
     } catch (error) {
-      console.error('Failed to stop speech recognition:', error);
+      console.error('[Voice] Failed to stop:', error);
     }
-  }, [isListening]);
+  }, []);
 
   const toggleListening = useCallback(() => {
-    if (isListening) {
+    if (statusRef.current === 'listening') {
       stopListening();
     } else {
       startListening();
     }
-  }, [isListening, startListening, stopListening]);
+  }, [startListening, stopListening]);
 
   return {
     isListening,

@@ -129,6 +129,12 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
       setInputValue(transcript);
       setSource('voice');
     },
+    onInterim: (interim) => {
+      // Show live transcription in input while speaking
+      if (interim) {
+        setInputValue(interim);
+      }
+    },
     onError: (error) => {
       toast({ title: 'Voice Error', description: error, variant: 'destructive' });
     },
@@ -484,8 +490,19 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
                   onClick={isListening ? stopListening : startListening}
                   disabled={isExecuting || !!pendingActions || voiceStatus === 'permission-denied'}
                   title={voiceStatusMessage}
+                  className={cn(
+                    'relative transition-all',
+                    isListening && 'ring-2 ring-destructive ring-offset-2 animate-pulse'
+                  )}
                 >
-                  {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                  {isListening ? (
+                    <>
+                      <MicOff className="h-4 w-4" />
+                      <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-destructive animate-ping" />
+                    </>
+                  ) : (
+                    <Mic className="h-4 w-4" />
+                  )}
                 </Button>
               )}
               
