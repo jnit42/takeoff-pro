@@ -60,11 +60,11 @@ export default function Settings() {
 
   return (
     <AppLayout>
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-2xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold">Settings</h1>
-          <p className="text-muted-foreground mt-1">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold">Settings</h1>
+          <p className="text-muted-foreground mt-1 text-sm sm:text-base">
             Manage your account and preferences
           </p>
         </div>
@@ -74,36 +74,37 @@ export default function Settings() {
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <div className="space-y-6 max-w-2xl">
+          <div className="space-y-4 sm:space-y-6">
             {/* Profile */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <User className="h-5 w-5" />
+              <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                  <User className="h-4 w-4 sm:h-5 sm:w-5" />
                   Profile
                 </CardTitle>
-                <CardDescription>Your personal information</CardDescription>
+                <CardDescription className="text-sm">Your personal information</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0 space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email" className="text-sm">Email</Label>
                   <Input
                     id="email"
                     value={profile?.email || ''}
                     disabled
-                    className="bg-muted"
+                    className="bg-muted text-sm"
                   />
                   <p className="text-xs text-muted-foreground">
                     Email cannot be changed
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="full_name">Full Name</Label>
+                  <Label htmlFor="full_name" className="text-sm">Full Name</Label>
                   <Input
                     id="full_name"
                     defaultValue={profile?.full_name || ''}
                     onBlur={(e) => handleChange('full_name', e.target.value)}
                     placeholder="Your full name"
+                    className="text-sm"
                   />
                 </div>
               </CardContent>
@@ -111,21 +112,22 @@ export default function Settings() {
 
             {/* Company */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Building className="h-5 w-5" />
+              <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                  <Building className="h-4 w-4 sm:h-5 sm:w-5" />
                   Company
                 </CardTitle>
-                <CardDescription>Your business information</CardDescription>
+                <CardDescription className="text-sm">Your business information</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0 space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="company_name">Company Name</Label>
+                  <Label htmlFor="company_name" className="text-sm">Company Name</Label>
                   <Input
                     id="company_name"
                     defaultValue={profile?.company_name || ''}
                     onBlur={(e) => handleChange('company_name', e.target.value)}
                     placeholder="Your company name"
+                    className="text-sm"
                   />
                   <p className="text-xs text-muted-foreground">
                     This will appear on exported PDFs
@@ -136,16 +138,16 @@ export default function Settings() {
 
             {/* Defaults */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <SettingsIcon className="h-5 w-5" />
+              <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                  <SettingsIcon className="h-4 w-4 sm:h-5 sm:w-5" />
                   Default Settings
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-sm">
                   Default values for new projects
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
                 <p className="text-sm text-muted-foreground">
                   Default project settings can be configured when creating a new project.
                   These include tax rate, waste factor, markup percentage, and labor burden.
