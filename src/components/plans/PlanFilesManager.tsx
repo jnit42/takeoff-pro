@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Upload, FileText, Trash2, Loader2, File, Image, Eye, Ruler } from 'lucide-react';
+import { Upload, FileText, Trash2, Loader2, File, Image, Eye, Ruler, PenTool } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { GuidedTakeoff } from './GuidedTakeoff';
+import { BlueprintViewer } from './BlueprintViewer';
 
 interface PlanFile {
   id: string;
@@ -32,6 +33,7 @@ export function PlanFilesManager({ projectId }: PlanFilesManagerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [guidedTakeoffFile, setGuidedTakeoffFile] = useState<PlanFile | null>(null);
+  const [viewerFile, setViewerFile] = useState<PlanFile | null>(null);
 
   const { data: planFiles = [], isLoading } = useQuery({
     queryKey: ['plan-files', projectId],
@@ -107,9 +109,27 @@ export function PlanFilesManager({ projectId }: PlanFilesManagerProps) {
   };
 
   const handleViewFile = async (file: PlanFile) => {
-    const { data } = await supabase.storage.from('plan-files').createSignedUrl(file.file_path, 3600);
-    if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+    // Open in-app viewer for PDFs, external for images
+    if (file.filename.toLowerCase().endsWith('.pdf')) {
+      setViewerFile(file);
+    } else {
+      const { data } = await supabase.storage.from('plan-files').createSignedUrl(file.file_path, 3600);
+      if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+    }
   };
+
+  // Show Blueprint Viewer
+  if (viewerFile) {
+    return (
+      <BlueprintViewer
+        projectId={projectId}
+        planFileId={viewerFile.id}
+        filename={viewerFile.filename}
+        filePath={viewerFile.file_path}
+        onClose={() => setViewerFile(null)}
+      />
+    );
+  }
 
   if (guidedTakeoffFile) {
     return (
@@ -196,6 +216,11 @@ export function PlanFilesManager({ projectId }: PlanFilesManagerProps) {
                     <Button variant="accent" size="sm" className="flex-1" onClick={() => setGuidedTakeoffFile(file)}>
                       <Ruler className="h-3 w-3 mr-1" />Guided Takeoff
                     </Button>
+                    {file.filename.toLowerCase().endsWith('.pdf') && (
+                      <Button variant="outline" size="sm" onClick={() => setViewerFile(file)} title="Open with Measurements">
+                        <PenTool className="h-3 w-3" />
+                      </Button>
+                    )}
                     <Button variant="outline" size="sm" onClick={() => handleViewFile(file)}><Eye className="h-3 w-3" /></Button>
                     <Button variant="ghost" size="sm" onClick={() => deleteFileMutation.mutate(file)} className="text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>
                   </div>
