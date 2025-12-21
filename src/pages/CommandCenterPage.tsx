@@ -1,5 +1,6 @@
 /**
  * Global Command Center Page - with project picker
+ * Mobile-optimized layout
  */
 
 import { useState } from 'react';
@@ -14,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Terminal, FolderKanban, ChevronRight } from 'lucide-react';
+import { Terminal, FolderKanban } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 export default function CommandCenterPage() {
@@ -36,37 +37,44 @@ export default function CommandCenterPage() {
 
   return (
     <AppLayout>
-      <div className="h-screen flex flex-col bg-gradient-to-br from-background via-background to-muted/30">
-        {/* Clean header */}
-        <div className="border-b border-border/50 bg-background/80 backdrop-blur-sm">
-          <div className="px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <Terminal className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h1 className="text-xl font-semibold tracking-tight">Command Center</h1>
-                <p className="text-sm text-muted-foreground">AI-powered estimating assistant</p>
+      <div className="h-[calc(100vh-3.5rem)] md:h-screen flex flex-col bg-background">
+        {/* Header - compact on mobile */}
+        <div className="border-b border-border/50 bg-background/95 backdrop-blur-sm flex-shrink-0">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 space-y-3">
+            {/* Title row */}
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <div className="p-1.5 sm:p-2 rounded-lg bg-primary/10 flex-shrink-0">
+                  <Terminal className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <h1 className="text-lg sm:text-xl font-semibold tracking-tight truncate">
+                    Command Center
+                  </h1>
+                  <p className="text-xs sm:text-sm text-muted-foreground hidden sm:block">
+                    AI-powered estimating assistant
+                  </p>
+                </div>
               </div>
             </div>
             
-            {/* Inline project selector */}
-            <div className="flex items-center gap-3">
-              <FolderKanban className="h-4 w-4 text-muted-foreground" />
+            {/* Project selector - full width on mobile */}
+            <div className="flex items-center gap-2">
+              <FolderKanban className="h-4 w-4 text-muted-foreground flex-shrink-0" />
               <Select
                 value={selectedProjectId || ''}
                 onValueChange={(value) => setSelectedProjectId(value || null)}
               >
-                <SelectTrigger className="w-64 h-9 text-sm bg-background border-border/50">
+                <SelectTrigger className="flex-1 h-9 text-sm bg-background border-border/50">
                   <SelectValue placeholder="Select a project..." />
                 </SelectTrigger>
                 <SelectContent className="bg-popover border shadow-lg z-50">
                   {projects.map((project) => (
                     <SelectItem key={project.id} value={project.id} className="text-sm">
                       <div className="flex items-center gap-2">
-                        <span>{project.name}</span>
+                        <span className="truncate">{project.name}</span>
                         {project.status && (
-                          <Badge variant="outline" className="text-[10px] py-0 h-5">
+                          <Badge variant="outline" className="text-[10px] py-0 h-5 flex-shrink-0">
                             {project.status}
                           </Badge>
                         )}
@@ -76,24 +84,23 @@ export default function CommandCenterPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Selected project indicator */}
+            {selectedProject && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="text-foreground font-medium">Working on:</span>
+                <span className="truncate">{selectedProject.name}</span>
+              </div>
+            )}
           </div>
-          
-          {/* Breadcrumb when project selected */}
-          {selectedProject && (
-            <div className="px-6 pb-3 flex items-center gap-2 text-sm text-muted-foreground">
-              <span>Projects</span>
-              <ChevronRight className="h-3 w-3" />
-              <span className="text-foreground font-medium">{selectedProject.name}</span>
-            </div>
-          )}
         </div>
 
-        {/* Command Center - full remaining height */}
-        <div className="flex-1 min-h-0 p-4">
+        {/* Command Center - fills remaining space */}
+        <div className="flex-1 min-h-0 p-2 sm:p-4">
           <CommandCenter
             projectId={selectedProjectId || undefined}
             projectType={undefined}
-            className="h-full shadow-sm"
+            className="h-full"
           />
         </div>
       </div>

@@ -120,23 +120,23 @@ export default function Projects() {
 
   return (
     <AppLayout>
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
           <div>
-            <h1 className="text-3xl font-bold">Projects</h1>
-            <p className="text-muted-foreground mt-1">
-              Manage your construction takeoffs and estimates
+            <h1 className="text-2xl sm:text-3xl font-bold">Projects</h1>
+            <p className="text-muted-foreground mt-1 text-sm sm:text-base">
+              Manage your construction takeoffs
             </p>
           </div>
           <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
             <DialogTrigger asChild>
-              <Button variant="accent" size="lg">
-                <Plus className="h-5 w-5" />
+              <Button variant="accent" size="default" className="w-full sm:w-auto">
+                <Plus className="h-4 w-4 sm:h-5 sm:w-5" />
                 New Project
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="sm:max-w-md mx-4 sm:mx-auto">
               <DialogHeader>
                 <DialogTitle>Create New Project</DialogTitle>
                 <DialogDescription>
@@ -187,14 +187,15 @@ export default function Projects() {
                   </Select>
                 </div>
               </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
+              <DialogFooter className="flex-col sm:flex-row gap-2">
+                <Button variant="outline" onClick={() => setIsCreateOpen(false)} className="w-full sm:w-auto">
                   Cancel
                 </Button>
                 <Button
                   variant="accent"
                   onClick={() => createMutation.mutate(newProject)}
                   disabled={!newProject.name || createMutation.isPending}
+                  className="w-full sm:w-auto"
                 >
                   {createMutation.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -208,13 +209,13 @@ export default function Projects() {
         </div>
 
         {/* Search */}
-        <div className="relative mb-6 max-w-md">
+        <div className="relative mb-6">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search projects..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
+            className="pl-10 w-full sm:max-w-md"
           />
         </div>
 
@@ -225,12 +226,12 @@ export default function Projects() {
           </div>
         ) : filteredProjects?.length === 0 ? (
           <Card className="border-dashed">
-            <CardContent className="flex flex-col items-center justify-center py-12">
+            <CardContent className="flex flex-col items-center justify-center py-12 px-4">
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-4">
                 <FolderKanban className="h-8 w-8 text-muted-foreground" />
               </div>
-              <h3 className="font-semibold text-lg mb-1">No projects yet</h3>
-              <p className="text-muted-foreground text-center max-w-sm">
+              <h3 className="font-semibold text-lg mb-1 text-center">No projects yet</h3>
+              <p className="text-muted-foreground text-center max-w-sm text-sm">
                 Create your first project to start building material takeoffs and labor estimates.
               </p>
               <Button
@@ -244,21 +245,21 @@ export default function Projects() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             {filteredProjects?.map((project) => (
               <Card
                 key={project.id}
                 className="interactive-card cursor-pointer group"
                 onClick={() => navigate(`/projects/${project.id}`)}
               >
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
+                <CardHeader className="pb-3 p-4">
+                  <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <CardTitle className="text-lg truncate group-hover:text-accent transition-colors">
+                      <CardTitle className="text-base sm:text-lg truncate group-hover:text-accent transition-colors">
                         {project.name}
                       </CardTitle>
                       {project.address && (
-                        <CardDescription className="flex items-center gap-1 mt-1">
+                        <CardDescription className="flex items-center gap-1 mt-1 text-xs sm:text-sm">
                           <MapPin className="h-3 w-3 shrink-0" />
                           <span className="truncate">{project.address}</span>
                         </CardDescription>
@@ -266,7 +267,7 @@ export default function Projects() {
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                        <Button variant="ghost" size="icon-sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
@@ -292,8 +293,8 @@ export default function Projects() {
                     </DropdownMenu>
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between text-sm text-muted-foreground">
+                <CardContent className="p-4 pt-0">
+                  <div className="flex items-center justify-between text-xs sm:text-sm text-muted-foreground">
                     <div className="flex items-center gap-1">
                       <Calendar className="h-3 w-3" />
                       {format(new Date(project.updated_at), 'MMM d, yyyy')}

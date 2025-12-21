@@ -20,10 +20,8 @@ import {
   History,
   HelpCircle,
   AlertTriangle,
-  ExternalLink,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -45,6 +43,7 @@ import { parseCommand, getCapabilities, PARSER_VERSION, type ParseSuggestion } f
 import { executeActions, undoAction, type ExecutionResult } from '@/lib/commandExecutor';
 import type { ParsedAction } from '@/lib/commandParser';
 import { ActionLogViewer } from './ActionLogViewer';
+import { MaterialList } from './MaterialListItem';
 import { cn } from '@/lib/utils';
 
 interface Message {
@@ -467,13 +466,37 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
 
   const voiceConfig = VOICE_STATUS_CONFIG[voiceStatus];
 
+  // Extract material items from pending actions for display
+  const getPendingMaterialItems = () => {
+    if (!pendingActions) return [];
+    
+    const items: Array<{ description: string; quantity: number; unit: string; category?: string }> = [];
+    for (const action of pendingActions) {
+      if (action.type === 'takeoff.add_multiple' && action.params.items) {
+        const actionItems = action.params.items as Array<{ description: string; quantity: number; unit: string; category?: string }>;
+        items.push(...actionItems);
+      } else if (action.type === 'takeoff.add_item') {
+        items.push({
+          description: action.params.description as string,
+          quantity: action.params.quantity as number,
+          unit: action.params.unit as string,
+          category: action.params.category as string,
+        });
+      }
+    }
+    return items;
+  };
+
+  const pendingMaterialItems = getPendingMaterialItems();
+
   return (
-    <Card className={cn('flex flex-col h-full', className)}>
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center justify-between text-lg">
+    <Card className={cn('flex flex-col h-full overflow-hidden', className)}>
+      <CardHeader className="pb-2 px-3 sm:px-6 flex-shrink-0">
+        <CardTitle className="flex items-center justify-between text-base sm:text-lg">
           <div className="flex items-center gap-2">
-            <Terminal className="h-5 w-5 text-accent" />
-            Command Center
+            <Terminal className="h-4 w-4 sm:h-5 sm:w-5 text-accent" />
+            <span className="hidden sm:inline">Command Center</span>
+            <span className="sm:hidden">Commands</span>
           </div>
           <Badge variant="outline" className="text-[10px]">
             v{PARSER_VERSION}
@@ -481,39 +504,39 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
         </CardTitle>
       </CardHeader>
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'chat' | 'history')} className="flex-1 flex flex-col">
-        <TabsList className="mx-3 grid grid-cols-2">
-          <TabsTrigger value="chat" className="gap-1 text-xs">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'chat' | 'history')} className="flex-1 flex flex-col min-h-0">
+        <TabsList className="mx-3 grid grid-cols-2 flex-shrink-0">
+          <TabsTrigger value="chat" className="gap-1.5 text-xs">
             <Terminal className="h-3 w-3" />
             Commands
           </TabsTrigger>
-          <TabsTrigger value="history" className="gap-1 text-xs">
+          <TabsTrigger value="history" className="gap-1.5 text-xs">
             <History className="h-3 w-3" />
             History
           </TabsTrigger>
         </TabsList>
 
-        <CardContent className="flex-1 flex flex-col gap-3 p-3 pt-2 overflow-hidden">
-          <TabsContent value="chat" className="flex-1 flex flex-col gap-3 mt-0 data-[state=inactive]:hidden overflow-hidden">
+        <CardContent className="flex-1 flex flex-col gap-2 sm:gap-3 p-3 pt-2 min-h-0 overflow-hidden">
+          <TabsContent value="chat" className="flex-1 flex flex-col gap-2 sm:gap-3 mt-0 data-[state=inactive]:hidden min-h-0 overflow-hidden">
             {/* Project Warning */}
             {!projectId && (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-warning/10 border border-warning/30 text-warning">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-warning/10 border border-warning/30 text-warning flex-shrink-0">
                 <AlertTriangle className="h-3 w-3 shrink-0" />
                 <span>No project selected. Some commands require a project context.</span>
               </div>
             )}
 
-            {/* Messages */}
-            <ScrollArea className="flex-1" ref={scrollRef}>
-              <div className="space-y-3 pr-3">
+            {/* Messages - scrollable area */}
+            <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
+              <div className="space-y-3 pr-2">
                 {messages.map((msg) => (
                   <div
                     key={msg.id}
                     className={cn(
-                      'rounded-lg p-3 text-sm break-words',
-                      msg.role === 'user' && 'bg-primary/10 ml-6 border border-primary/20',
-                      msg.role === 'system' && 'bg-muted/80 border border-muted-foreground/10',
-                      msg.role === 'preview' && 'bg-amber-50 dark:bg-amber-950/30 border-2 border-amber-300 dark:border-amber-700',
+                      'rounded-lg p-3 text-sm break-words animate-fade-in',
+                      msg.role === 'user' && 'bg-primary/10 ml-4 sm:ml-8 border border-primary/20',
+                      msg.role === 'system' && 'bg-muted/60 border border-border/50',
+                      msg.role === 'preview' && 'bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800',
                       msg.role === 'suggestion' && 'bg-accent/5 border border-accent/20'
                     )}
                   >
@@ -524,10 +547,23 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
                         <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
                       )}
                       <div className="flex-1 min-w-0">
-                        <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                        {/* For preview messages with material items, show structured list */}
+                        {msg.role === 'preview' && msg.actions ? (
+                          <div className="space-y-3">
+                            <p className="text-sm text-amber-800 dark:text-amber-200 font-medium">
+                              {msg.content.split('\n')[0]}
+                            </p>
+                            {/* Material list will be shown in pending panel below */}
+                            <p className="text-xs text-amber-600 dark:text-amber-400">
+                              Review items below. Ask questions or say "confirm" when ready.
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="whitespace-pre-wrap break-words leading-relaxed">{msg.content}</p>
+                        )}
                         {/* Clickable suggestions */}
                         {msg.suggestions && msg.suggestions.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-2">
+                          <div className="flex flex-wrap gap-1.5 mt-2">
                             {msg.suggestions.map((s, idx) => (
                               <Badge
                                 key={idx}
@@ -547,51 +583,63 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
               </div>
             </ScrollArea>
 
-            {/* Pending actions indicator - shows actual item count */}
+            {/* Pending actions panel - expandable with material list */}
             {pendingActions && (
-              <div className="rounded-lg bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-400 dark:border-amber-600 shadow-sm overflow-hidden">
-                <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-amber-100/50 dark:bg-amber-900/30 border-b border-amber-300 dark:border-amber-700">
+              <div className="rounded-xl bg-gradient-to-b from-amber-50 to-amber-100/50 dark:from-amber-950/40 dark:to-amber-900/20 border border-amber-200 dark:border-amber-800 shadow-sm overflow-hidden flex-shrink-0">
+                {/* Header with count and actions */}
+                <div className="flex items-center justify-between gap-2 px-3 sm:px-4 py-2.5 bg-amber-100/80 dark:bg-amber-900/40 border-b border-amber-200 dark:border-amber-700">
                   <div className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                    <span className="text-sm text-amber-800 dark:text-amber-200 font-semibold">
-                      {getPendingItemCount(pendingActions)} item{getPendingItemCount(pendingActions) !== 1 ? 's' : ''} ready
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-white text-xs font-bold">
+                      {getPendingItemCount(pendingActions)}
+                    </div>
+                    <span className="text-sm text-amber-800 dark:text-amber-200 font-medium">
+                      Items Ready
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     <Button
                       variant="default"
                       size="sm"
                       onClick={() => handleConfirmActions()}
                       disabled={isExecuting}
-                      className="h-8 px-4 text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white"
+                      className="h-8 px-3 sm:px-4 text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
                     >
-                      {isExecuting ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Check className="h-3 w-3 mr-1" />}
-                      Confirm All
+                      {isExecuting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 sm:mr-1" />}
+                      <span className="hidden sm:inline">Confirm</span>
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={handleCancelActions}
                       disabled={isExecuting}
-                      className="h-8 w-8 p-0 text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-200 hover:bg-amber-200/50"
+                      className="h-8 w-8 p-0 text-amber-600 dark:text-amber-400 hover:text-amber-800 hover:bg-amber-200/50 rounded-full"
                     >
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
-                <div className="px-4 py-2 text-xs text-amber-700 dark:text-amber-300">
-                  Say "confirm" or keep refining the proposal
+                
+                {/* Material list - scrollable if many items */}
+                {pendingMaterialItems.length > 0 && (
+                  <div className="max-h-48 sm:max-h-64 overflow-y-auto p-3 scrollbar-thin">
+                    <MaterialList items={pendingMaterialItems} />
+                  </div>
+                )}
+                
+                {/* Footer hint */}
+                <div className="px-3 py-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50/50 dark:bg-amber-950/30 border-t border-amber-200/50 dark:border-amber-800/50">
+                  💬 Refine by asking questions, or say "confirm" to add all
                 </div>
               </div>
             )}
 
-            {/* Quick Commands */}
-            <div className="flex flex-wrap gap-1">
+            {/* Quick Commands - horizontal scroll on mobile */}
+            <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin flex-shrink-0">
               {QUICK_COMMANDS.map((qc) => (
                 <Badge
                   key={qc.label}
                   variant="secondary"
-                  className="cursor-pointer hover:bg-accent/20 transition-colors text-xs"
+                  className="cursor-pointer hover:bg-accent/20 transition-colors text-xs whitespace-nowrap flex-shrink-0"
                   onClick={() => handleSuggestionClick(qc.command)}
                 >
                   {qc.label}
@@ -602,20 +650,20 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
             {/* Voice Status - compact */}
             {voiceSupported && voiceStatus !== 'idle' && (
               <div className={cn(
-                'flex items-center gap-2 px-3 py-1.5 rounded-md text-xs',
-                voiceStatus === 'listening' && 'bg-green-500/10 text-green-600',
-                voiceStatus === 'processing' && 'bg-yellow-500/10 text-yellow-600',
-                voiceStatus === 'error' && 'bg-destructive/10 text-destructive',
-                voiceStatus === 'permission-denied' && 'bg-destructive/10 text-destructive',
+                'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs flex-shrink-0',
+                voiceStatus === 'listening' && 'bg-green-500/10 text-green-600 border border-green-200 dark:border-green-800',
+                voiceStatus === 'processing' && 'bg-yellow-500/10 text-yellow-600 border border-yellow-200 dark:border-yellow-800',
+                voiceStatus === 'error' && 'bg-destructive/10 text-destructive border border-destructive/20',
+                voiceStatus === 'permission-denied' && 'bg-destructive/10 text-destructive border border-destructive/20',
               )}>
                 <div className={cn('h-2 w-2 rounded-full', voiceConfig.bgColor, voiceConfig.pulse && 'animate-pulse')} />
                 <span>{voiceConfig.message}</span>
               </div>
             )}
 
-            {/* Input area - redesigned for clarity */}
-            <div className="border-t border-border pt-3 mt-auto">
-              <form onSubmit={handleSubmit} className="flex items-center gap-2">
+            {/* Input area - mobile optimized */}
+            <div className="border-t border-border/50 pt-3 mt-auto flex-shrink-0 bg-background/80">
+              <form onSubmit={handleSubmit} className="flex items-end gap-2">
                 <div className="flex-1 relative">
                   <textarea
                     ref={inputRef}
@@ -627,14 +675,14 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
                         handleSubmit();
                       }
                     }}
-                    placeholder={projectId ? "Ask questions or give commands..." : "Select a project first..."}
-                    className="w-full min-h-[44px] max-h-[120px] overflow-y-auto resize-none rounded-lg border-2 border-input bg-background px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
+                    placeholder={projectId ? "Type or speak..." : "Select a project..."}
+                    className="w-full min-h-[44px] max-h-[100px] overflow-y-auto resize-none rounded-xl border border-input bg-background px-3 sm:px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
                     disabled={isExecuting}
                     rows={1}
                   />
                 </div>
                 
-                <div className="flex gap-1.5 shrink-0">
+                <div className="flex gap-1.5 shrink-0 pb-0.5">
                   {voiceSupported && (
                     <Button
                       type="button"
@@ -644,8 +692,8 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
                       disabled={isExecuting || voiceStatus === 'permission-denied'}
                       title={voiceStatusMessage}
                       className={cn(
-                        'h-11 w-11 transition-all rounded-lg',
-                        isListening && 'ring-2 ring-destructive ring-offset-2'
+                        'h-10 w-10 sm:h-11 sm:w-11 transition-all rounded-xl',
+                        isListening && 'ring-2 ring-destructive ring-offset-1'
                       )}
                     >
                       {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
@@ -656,7 +704,7 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
                     type="submit"
                     size="icon"
                     disabled={!inputValue.trim() || isExecuting}
-                    className="h-11 w-11 rounded-lg"
+                    className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl"
                   >
                     <Send className="h-4 w-4" />
                   </Button>

@@ -70,18 +70,18 @@ export default function Reports() {
 
   return (
     <AppLayout>
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
           <div>
-            <h1 className="text-3xl font-bold">Reports</h1>
-            <p className="text-muted-foreground mt-1">
+            <h1 className="text-2xl sm:text-3xl font-bold">Reports</h1>
+            <p className="text-muted-foreground mt-1 text-sm sm:text-base">
               Overview of your estimating activity
             </p>
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline">
+              <Button variant="outline" className="w-full sm:w-auto">
                 <Download className="h-4 w-4 mr-2" />
                 Export All
               </Button>
@@ -106,51 +106,51 @@ export default function Reports() {
           </div>
         ) : (
           <>
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
+            <div className="grid gap-3 sm:gap-4 lg:gap-6 grid-cols-2 lg:grid-cols-4 mb-6 sm:mb-8">
               <Card>
-                <CardHeader className="pb-2">
-                  <CardDescription className="flex items-center gap-2">
-                    <FolderKanban className="h-4 w-4" />
-                    Total Projects
+                <CardHeader className="pb-2 p-3 sm:p-6">
+                  <CardDescription className="flex items-center gap-2 text-xs sm:text-sm">
+                    <FolderKanban className="h-3 w-3 sm:h-4 sm:w-4" />
+                    <span className="hidden sm:inline">Total</span> Projects
                   </CardDescription>
-                  <CardTitle className="text-3xl">{stats?.projectCount || 0}</CardTitle>
+                  <CardTitle className="text-xl sm:text-3xl">{stats?.projectCount || 0}</CardTitle>
                 </CardHeader>
               </Card>
 
               <Card>
-                <CardHeader className="pb-2">
-                  <CardDescription className="flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4" />
-                    Total Materials (Active)
+                <CardHeader className="pb-2 p-3 sm:p-6">
+                  <CardDescription className="flex items-center gap-2 text-xs sm:text-sm">
+                    <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4" />
+                    Materials
                   </CardDescription>
-                  <CardTitle className="text-3xl font-mono">
+                  <CardTitle className="text-lg sm:text-3xl font-mono">
                     {formatCurrency(stats?.totalMaterials || 0)}
                   </CardTitle>
-                  <p className="text-xs text-muted-foreground mt-1">
+                  <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
                     {stats?.activeCount || 0} items ({stats?.draftCount || 0} drafts)
                   </p>
                 </CardHeader>
               </Card>
 
               <Card>
-                <CardHeader className="pb-2">
-                  <CardDescription className="flex items-center gap-2">
-                    <DollarSign className="h-4 w-4" />
-                    Total Labor
+                <CardHeader className="pb-2 p-3 sm:p-6">
+                  <CardDescription className="flex items-center gap-2 text-xs sm:text-sm">
+                    <DollarSign className="h-3 w-3 sm:h-4 sm:w-4" />
+                    Labor
                   </CardDescription>
-                  <CardTitle className="text-3xl font-mono">
+                  <CardTitle className="text-lg sm:text-3xl font-mono">
                     {formatCurrency(stats?.totalLabor || 0)}
                   </CardTitle>
                 </CardHeader>
               </Card>
 
-              <Card className="bg-accent/10 border-accent/20">
-                <CardHeader className="pb-2">
-                  <CardDescription className="flex items-center gap-2">
-                    <BarChart3 className="h-4 w-4" />
+              <Card className="bg-accent/10 border-accent/20 col-span-2 lg:col-span-1">
+                <CardHeader className="pb-2 p-3 sm:p-6">
+                  <CardDescription className="flex items-center gap-2 text-xs sm:text-sm">
+                    <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4" />
                     Grand Total
                   </CardDescription>
-                  <CardTitle className="text-3xl font-mono text-accent">
+                  <CardTitle className="text-xl sm:text-3xl font-mono text-accent">
                     {formatCurrency(stats?.grandTotal || 0)}
                   </CardTitle>
                 </CardHeader>
@@ -159,10 +159,10 @@ export default function Reports() {
 
             {/* Coming Soon */}
             <Card className="border-dashed">
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <BarChart3 className="h-16 w-16 text-muted-foreground mb-4" />
-                <h3 className="font-semibold text-lg mb-2">Advanced Reports Coming Soon</h3>
-                <p className="text-muted-foreground text-center max-w-md">
+              <CardContent className="flex flex-col items-center justify-center py-8 sm:py-12 px-4">
+                <BarChart3 className="h-12 w-12 sm:h-16 sm:w-16 text-muted-foreground mb-4" />
+                <h3 className="font-semibold text-base sm:text-lg mb-2 text-center">Advanced Reports Coming Soon</h3>
+                <p className="text-muted-foreground text-center max-w-md text-sm">
                   Detailed analytics including cost breakdowns by category, vendor analysis,
                   historical comparisons, and profit margin tracking.
                 </p>
