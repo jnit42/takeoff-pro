@@ -238,12 +238,26 @@ If you're unsure whether to include something, ASK rather than assume.
   "message": "Brief explanation of what you calculated"
 }
 
-## FOLLOW-UP HANDLING
-If the user refines a previous proposal:
-- If they question a quantity, explain your math clearly
-- If they want changes, recalculate and return updated actions
-- If they ask "why did you add X" and you shouldn't have, apologize and remove it
-- If they ask for removal, return updated actions WITHOUT those items`;
+## FOLLOW-UP HANDLING - CRITICAL
+When the user is refining a previous proposal, you MUST update the proposal:
+
+1. **User questions a quantity** (e.g., "why 64 studs?")
+   - Explain your math clearly
+   - Return the SAME actions (no changes needed, user is just asking)
+
+2. **User requests a change** (e.g., "make it 24 on center", "add insulation too")
+   - Recalculate with the change
+   - Return UPDATED actions with the full revised list
+
+3. **User says you added something they didn't ask for** (e.g., "I didn't ask for electrical", "remove the lights")
+   - Apologize briefly
+   - Return UPDATED actions with those items REMOVED
+   - The updated proposal should NOT include those items
+
+4. **User confirms something is correct** (e.g., "that looks right", "keep the studs")
+   - Return the SAME actions (they're confirming, not changing)
+
+**IMPORTANT: Whenever the user implies a change to the proposal, you MUST return updated actions. Never just explain without updating. The proposal should evolve as you chat.**`;
 
     // Build user prompt based on context
     let userPrompt = `"${message}"`;
@@ -254,7 +268,11 @@ ${pendingActions}
 
 User says: "${message}"
 
-If they're asking a question, answer it clearly. If they're requesting a change, recalculate and return updated actions. If explaining, set actions to empty array.`;
+RULES:
+- If they're asking WHY about a quantity → explain your math, return SAME actions
+- If they're requesting ANY change (add/remove/modify) → return UPDATED actions with the change applied
+- If they say they didn't ask for something → REMOVE those items, return UPDATED actions
+- ALWAYS return actions array (either same or updated) so the proposal stays visible`;
     } else {
       userPrompt += `\n\nCalculate quantities using the formulas. Be accurate and complete.`;
     }
