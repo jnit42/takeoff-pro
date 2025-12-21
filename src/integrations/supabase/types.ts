@@ -94,6 +94,76 @@ export type Database = {
           },
         ]
       }
+      blueprint_measurements: {
+        Row: {
+          coordinates_json: Json
+          created_at: string
+          id: string
+          label: string | null
+          measurement_type: string
+          page_number: number | null
+          plan_file_id: string
+          project_id: string
+          scale: number | null
+          takeoff_item_id: string | null
+          trade: string | null
+          unit: string
+          value: number | null
+        }
+        Insert: {
+          coordinates_json: Json
+          created_at?: string
+          id?: string
+          label?: string | null
+          measurement_type: string
+          page_number?: number | null
+          plan_file_id: string
+          project_id: string
+          scale?: number | null
+          takeoff_item_id?: string | null
+          trade?: string | null
+          unit?: string
+          value?: number | null
+        }
+        Update: {
+          coordinates_json?: Json
+          created_at?: string
+          id?: string
+          label?: string | null
+          measurement_type?: string
+          page_number?: number | null
+          plan_file_id?: string
+          project_id?: string
+          scale?: number | null
+          takeoff_item_id?: string | null
+          trade?: string | null
+          unit?: string
+          value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blueprint_measurements_plan_file_id_fkey"
+            columns: ["plan_file_id"]
+            isOneToOne: false
+            referencedRelation: "plan_files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "blueprint_measurements_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "blueprint_measurements_takeoff_item_id_fkey"
+            columns: ["takeoff_item_id"]
+            isOneToOne: false
+            referencedRelation: "takeoff_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       checklist_items: {
         Row: {
           created_at: string
