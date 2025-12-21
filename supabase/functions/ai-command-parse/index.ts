@@ -20,102 +20,102 @@ interface ParseResult {
   message?: string;
 }
 
-// Comprehensive construction knowledge
+// Accurate construction knowledge - formulas verified
 const CONSTRUCTION_KNOWLEDGE = `
-## MATERIAL COVERAGE RATES & ESTIMATING
+## FRAMING - ACCURATE FORMULAS
 
-### Drywall
-- 4x8 sheet = 32 SF, 4x12 = 48 SF
-- Waste factor: 10-15% (use 10% standard)
-- Formula: sheets = (total SF × 1.10) ÷ sheet size
-- Mud: 1 gallon per 100 SF
+### Stud Count (16" OC - standard)
+- Formula: studs = (wall LF × 12 / 16) + 1 per wall section
+- Simplified: studs = wall LF × 0.75, then round up
+- Add 1 stud per corner (4 corners = 4 extra studs)
+- Add 2 studs per door/window opening (king + trimmer each side)
+
+### Plates
+- Bottom plate: 1 LF per 1 LF wall (SINGLE) - use PT (pressure treated) on concrete
+- Top plate: 2 LF per 1 LF wall (DOUBLE top plate is code)
+- Total plate LF = wall LF × 3
+
+### Example: 20×30 room (8' ceiling, no doors/windows)
+- Perimeter = 2×(20+30) = 100 LF
+- Studs at 16" OC: 100 × 0.75 = 75 studs + 4 corners = 79 studs
+- PT bottom plate: 100 LF (on concrete)
+- Top plates: 200 LF (doubled)
+- Total plate stock: 100 ÷ 8' = 13 bottom plates + 200 ÷ 8' = 25 top plates
+
+### Standard stud lengths
+- 8' ceiling: use 92-5/8" precut studs or 8' studs
+- 9' ceiling: use 104-5/8" precut or 10' studs
+- 10' ceiling: use 116-5/8" precut or 10' studs
+
+## DRYWALL - ACCURATE FORMULAS
+
+### Sheet coverage
+- 4×8 sheet = 32 SF
+- 4×12 sheet = 48 SF (fewer seams, preferred for ceilings)
+
+### Quantity calculation
+- Wall SF = perimeter LF × wall height
+- Ceiling SF = floor SF (length × width)
+- Total SF = wall SF + ceiling SF
+- Sheets = total SF ÷ sheet size × waste factor (1.10 for 10% waste)
+
+### Example: 20×30 room, 8' walls, finishing ceiling
+- Wall SF = 100 LF × 8' = 800 SF
+- Ceiling SF = 20 × 30 = 600 SF
+- Total = 1400 SF
+- 4×8 sheets: 1400 × 1.10 ÷ 32 = 48 sheets
+- OR 4×12 sheets: 1400 × 1.10 ÷ 48 = 32 sheets
+
+### Drywall accessories (per 1000 SF)
+- Joint compound: 3-4 gallons (or 1 5-gal bucket per 500 SF)
 - Tape: 1 roll (500') per 500 SF
-- Screws: 1 lb per 100 SF
+- Screws: 1 lb per 100 SF (10 lbs per 1000 SF)
+- Corner bead: measure all outside corners LF
 
-### Framing
-- Studs at 16" OC: 0.75 studs per LF of wall
-- Studs at 24" OC: 0.50 studs per LF of wall  
-- Top/bottom plates: 1 LF per 1 LF of wall (doubled = 2x)
-- Headers: varies by opening
-- Blocking: ~10% extra studs
+## INSULATION
 
-### Insulation
-- R-13 batts (3.5"): 1 SF per SF of wall
-- R-19 batts (6.25"): 1 SF per SF of floor/ceiling
-- R-30 batts: 1 SF per SF
-- Waste: 5%
+### Batt insulation
+- Exterior walls: R-13 or R-15 (3.5" batts for 2×4 walls)
+- Basement walls: R-13 typical, check local code
+- Coverage: 1 SF per 1 SF of wall, +5% waste
+- Kraft-faced for vapor barrier in basement
 
-### Flooring
-- LVP/Laminate: 1 SF per SF + 10% waste
-- Tile: 1 SF per SF + 15% waste (cuts)
-- Carpet: 1 SF per SF + 5% waste
-- Underlayment: 1:1 with flooring
+## ELECTRICAL (basement typical)
 
-### Electrical (rough numbers)
-- Outlets: 1 per 80 SF minimum (code)
-- Switches: 1-2 per room
-- Recessed lights: 1 per 25-50 SF
-- Wire (14/2): ~25 LF per device
+### Code minimums
+- Outlets: 1 per 12 LF of wall (not per SF)
+- No point on wall more than 6' from outlet
+- Typical room: perimeter ÷ 12 = outlet count
+- Switches: 1-2 per room (entry points)
+- Lighting: 1 fixture per 50-100 SF
 
-### Plumbing
-- Bathroom rough-in: 1 toilet, 1 sink, 1 shower/tub typical
-- Kitchen rough-in: 1 sink, dishwasher, disposal
+### Example: 20×30 room
+- Perimeter = 100 LF
+- Outlets: 100 ÷ 12 = 9 outlets minimum
 
-### Trim
-- Baseboard: perimeter LF + 10%
-- Door casing: 17 LF per door
-- Window casing: ~12 LF per window
-- Crown: perimeter LF + 10%
+## SMART DEFAULTS (use these, don't ask)
 
-## ROOM/PROJECT CALCULATIONS
+### Basement assumptions (unless told otherwise)
+- Ceiling height: 8' (standard)
+- Bottom plates: PT lumber on concrete
+- Exterior walls: insulated with vapor barrier
+- Include ceiling drywall (finishing the space)
+- Standard 16" OC framing
 
-### For a rectangular room:
-- Perimeter LF = 2 × (length + width)
-- For square footage: perimeter ≈ 4 × √(floor SF)
-- Wall SF = perimeter LF × ceiling height
-- Ceiling SF ≈ floor SF
+### Don't over-ask
+- If room dimensions given → calculate and propose
+- If "basement" mentioned → use basement defaults
+- Only ask about: doors, windows, special finishes
+- Skip questions about obvious things
 
-### Common room sizes:
-- Small bedroom: 100-120 SF
-- Master bedroom: 150-200 SF  
-- Bathroom: 40-80 SF
-- Living room: 200-400 SF
-- Kitchen: 100-200 SF
+## COMMON MISTAKES TO AVOID
 
-### Basement finish typical scope (1000 SF example):
-- Wall LF: ~150 LF (rectangular layout)
-- Wall SF: 150 × 8' = 1200 SF
-- Ceiling SF: 1000 SF
-- Total drywall: 2200 SF = ~69 sheets (4x8) with 10% waste
-- Studs (16" OC): 150 × 0.75 = ~113 + plates
-- Outlets: 1000 ÷ 80 = ~13 minimum
-- Recessed lights: 1000 ÷ 40 = ~25
-
-## TYPICAL MATERIAL COSTS (material only)
-- Drywall 4x8 1/2": $12-18/sheet
-- 2x4x8 stud: $4-8
-- 2x4x10 stud: $6-10
-- R-13 insulation: $0.50-1.00/SF
-- LVP flooring: $2-5/SF
-- Baseboard: $2-8/LF
-- Interior door (prehung): $80-200
-- Outlet/switch: $2-5 each
-- Wire 14/2 (250'): $50-80
-
-## TRADES
-- Demo/Prep
-- Framing
-- Rough Electrical
-- Rough Plumbing
-- HVAC
-- Insulation
-- Drywall
-- Paint
-- Flooring
-- Trim/Finish
-- Finish Electrical
-- Finish Plumbing
-- Cleanup
+1. Don't multiply studs × 3 for plates - plates are linear, not per-stud
+2. Don't forget corners add studs
+3. Don't mix up LF and EA
+4. Bottom plate on concrete MUST be pressure treated
+5. Top plates are ALWAYS doubled (code requirement)
+6. Don't ask obvious questions - use smart defaults
 `;
 
 serve(async (req) => {
@@ -147,7 +147,6 @@ serve(async (req) => {
     if (projectContext?.projectId && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
       const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       
-      // Get project details
       const { data: project } = await supabase
         .from('projects')
         .select('*')
@@ -157,7 +156,6 @@ serve(async (req) => {
       if (project) {
         projectData = project;
         
-        // Get ALL takeoff items (not just 50)
         const { data: items } = await supabase
           .from('takeoff_items')
           .select('*')
@@ -166,7 +164,6 @@ serve(async (req) => {
         
         if (items) takeoffItems = items;
         
-        // Get labor estimates
         const { data: labor } = await supabase
           .from('labor_line_items')
           .select('*, labor_estimates!inner(project_id)')
@@ -174,7 +171,6 @@ serve(async (req) => {
         
         if (labor) laborItems = labor;
         
-        // Get assumptions
         const { data: assumps } = await supabase
           .from('assumptions')
           .select('*')
@@ -182,7 +178,6 @@ serve(async (req) => {
         
         if (assumps) assumptions = assumps;
         
-        // Get RFIs
         const { data: rfiData } = await supabase
           .from('rfis')
           .select('*')
@@ -192,14 +187,12 @@ serve(async (req) => {
       }
     }
 
-    // Build detailed context string
     const takeoffSummary = buildTakeoffSummary(takeoffItems);
     const laborSummary = buildLaborSummary(laborItems);
     const projectSummary = buildProjectSummary(projectData, takeoffItems, laborItems, assumptions, rfis);
 
     console.log('[AI Parse] Input:', message);
     console.log('[AI Parse] Project:', projectData?.name);
-    console.log('[AI Parse] Items:', takeoffItems.length, 'takeoff,', laborItems.length, 'labor');
 
     if (!LOVABLE_API_KEY) {
       console.log('[AI Parse] No API key, using pattern fallback');
@@ -209,71 +202,60 @@ serve(async (req) => {
       );
     }
 
-    const systemPrompt = `You are an expert construction estimator AI assistant. You have deep knowledge of construction trades, materials, quantities, labor, and estimating practices. You speak confidently and knowledgeably - like a seasoned superintendent or estimator who knows their craft inside and out.
+    const systemPrompt = `You are an expert construction estimator. You know framing, drywall, electrical, plumbing - the whole trade. You calculate accurately and don't waste the user's time with obvious questions.
 
 ${CONSTRUCTION_KNOWLEDGE}
 
-## CURRENT PROJECT STATE
+## CURRENT PROJECT
 ${projectSummary}
 
-## DETAILED TAKEOFF
-${takeoffSummary || 'No items in takeoff yet.'}
+## EXISTING TAKEOFF
+${takeoffSummary || 'Empty - no items yet.'}
 
-## LABOR ESTIMATES
-${laborSummary || 'No labor estimates yet.'}
+## EXISTING LABOR
+${laborSummary || 'None yet.'}
 
-## YOUR PERSONALITY
-- You are CONFIDENT. You know construction. You don't say "I think" or "maybe" - you state facts.
-- You are HELPFUL. You proactively suggest what the user might need.
-- You are THOROUGH. When asked about the project, give real details from the data.
-- You CALCULATE. When asked about quantities, use the formulas and give specific numbers.
-- You REMEMBER. Reference what's already in the project when relevant.
+## YOUR STYLE
+- ACCURATE: Use the formulas above exactly. Double-check your math.
+- CONCISE: Don't ask questions you can answer with smart defaults.
+- CONFIDENT: State what you're adding. Don't hedge or say "I think".
+- COMPLETE: Include all materials needed (studs, plates, accessories).
 
-## WHAT YOU CAN DO
-1. **Report on Project Status**: Tell users exactly what's in their project, what's missing, totals, etc.
-2. **Calculate Quantities**: Given dimensions or scope, calculate exactly how much material is needed.
-3. **Add/Modify Items**: Add takeoff items, labor, set project defaults.
-4. **Suggest Next Steps**: Based on what's in the project, suggest what they should add next.
-5. **Answer Questions**: About construction methods, materials, best practices.
+## WHEN USER GIVES DIMENSIONS
+Calculate immediately using these steps:
+1. Perimeter = 2 × (length + width)
+2. Wall SF = perimeter × height (assume 8' if not specified)
+3. Ceiling SF = length × width (include unless told otherwise)
+4. Apply formulas from knowledge base
+5. Propose items with EXACT quantities
 
-## AVAILABLE ACTIONS
-- project.set_defaults: { markup_percent?, tax_percent?, waste_percent?, labor_burden_percent? }
-- takeoff.add_item: { description, quantity, unit, unit_cost?, category?, spec?, vendor?, notes? }
-- takeoff.add_multiple: { items: [{ description, quantity, unit, unit_cost?, category? }] }
-- takeoff.update_item: { id, updates: { quantity?, unit_cost?, notes?, category? } }
-- takeoff.delete_item: { id }
-- takeoff.generate_drafts_from_assemblies: { assemblies: string[], variables?: { floorSF?, wallLF?, wallHeight?, roomCount? } }
+## ACTIONS
+- takeoff.add_multiple: { items: [{ description, quantity, unit, category }] }
+- takeoff.add_item: { description, quantity, unit, category }
+- project.set_defaults: { markup_percent?, tax_percent?, waste_percent? }
 - takeoff.promote_drafts: { scope: 'all' }
-- takeoff.delete_drafts: { scope: 'all' }
-- labor.add_task_line: { task_name, quantity, unit, base_rate?, notes? }
 - export.pdf: {}
-- export.csv: { which: 'takeoff' | 'labor' | 'all' }
 - qa.show_issues: {}
-- navigate.plans: {}
-- navigate.takeoff: {}
-- navigate.labor: {}
 
-## RESPONSE FORMAT (STRICT JSON)
+## RESPONSE FORMAT (JSON only, no markdown)
 {
-  "success": true/false,
-  "actions": [{ "type": "action.type", "params": {...}, "confidence": 0.0-1.0 }],
+  "success": true,
+  "actions": [{ "type": "takeoff.add_multiple", "params": { "items": [...] }, "confidence": 0.95 }],
   "followUpQuestions": [],
-  "message": "Your confident, helpful response",
-  "suggestions": ["Next thing to consider"]
+  "message": "Brief explanation of what you calculated"
 }
 
-## CRITICAL RULES
-1. If user asks about the project, REPORT from the actual data above - be specific!
-2. If user describes scope, CALCULATE quantities using formulas, then propose takeoff.add_multiple
-3. If user asks about dimensions/rooms without data, TELL THEM what you need to know
-4. When adding items, always include CALCULATED quantities, not placeholders
-5. Be conversational but action-oriented
-6. If you can't do something, explain what you CAN do instead
-7. Reference actual items/totals from the project when relevant`;
+## RULES
+1. CALCULATE quantities - never guess or use placeholders
+2. Use smart defaults - don't ask about ceiling height, PT plates, etc.
+3. Only ask about doors/windows if it significantly affects the estimate
+4. Include ALL related materials (if drywall, include mud/tape/screws)
+5. Separate line items by trade category
+6. For basement: always use PT bottom plate, include insulation if exterior walls`;
 
-    const userPrompt = `User says: "${message}"
+    const userPrompt = `"${message}"
 
-Respond confidently based on the project data and your construction knowledge. If they're asking about the project, tell them what you know. If they want to add things, calculate the quantities. Be specific and helpful.`;
+Calculate quantities using the formulas. Be accurate and complete.`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -335,7 +317,6 @@ Respond confidently based on the project data and your construction knowledge. I
       parsed = JSON.parse(jsonStr.trim());
     } catch (e) {
       console.error('[AI Parse] JSON parse failed:', e);
-      // Return as conversational response
       return new Response(
         JSON.stringify({
           success: true,
@@ -362,45 +343,32 @@ Respond confidently based on the project data and your construction knowledge. I
   }
 });
 
-// Build detailed takeoff summary
 function buildTakeoffSummary(items: any[]): string {
   if (!items || items.length === 0) return '';
   
   const byCategory: Record<string, any[]> = {};
   let totalCost = 0;
-  let draftCount = 0;
   
   for (const item of items) {
     const cat = item.category || 'Uncategorized';
     byCategory[cat] = byCategory[cat] || [];
     byCategory[cat].push(item);
-    
     if (item.extended_cost) totalCost += item.extended_cost;
-    if (item.draft) draftCount++;
   }
   
-  let summary = `Total Items: ${items.length} (${draftCount} drafts)\nTotal Material Cost: $${totalCost.toLocaleString()}\n\n`;
+  let summary = `Total: ${items.length} items, $${totalCost.toLocaleString()}\n`;
   
   for (const [category, catItems] of Object.entries(byCategory)) {
-    const catTotal = catItems.reduce((sum, i) => sum + (i.extended_cost || 0), 0);
-    summary += `### ${category} (${catItems.length} items, $${catTotal.toLocaleString()})\n`;
-    
-    for (const item of catItems.slice(0, 10)) { // Limit per category
-      const draft = item.draft ? ' [DRAFT]' : '';
-      const cost = item.extended_cost ? ` = $${item.extended_cost.toLocaleString()}` : '';
-      summary += `- ${item.description}: ${item.quantity} ${item.unit}${cost}${draft}\n`;
+    summary += `\n${category}:\n`;
+    for (const item of catItems.slice(0, 5)) {
+      summary += `- ${item.description}: ${item.quantity} ${item.unit}\n`;
     }
-    
-    if (catItems.length > 10) {
-      summary += `- ... and ${catItems.length - 10} more items\n`;
-    }
-    summary += '\n';
+    if (catItems.length > 5) summary += `  ... +${catItems.length - 5} more\n`;
   }
   
   return summary;
 }
 
-// Build labor summary
 function buildLaborSummary(items: any[]): string {
   if (!items || items.length === 0) return '';
   
@@ -408,67 +376,41 @@ function buildLaborSummary(items: any[]): string {
   let summary = '';
   
   for (const item of items) {
-    const ext = item.extended || 0;
-    total += ext;
-    summary += `- ${item.task_name}: ${item.quantity} ${item.unit} × $${item.final_rate || item.base_rate}/unit = $${ext.toLocaleString()}\n`;
+    total += item.extended || 0;
+    summary += `- ${item.task_name}: ${item.quantity} ${item.unit}\n`;
   }
   
-  summary += `\nTotal Labor: $${total.toLocaleString()}`;
-  return summary;
+  return summary + `Total: $${total.toLocaleString()}`;
 }
 
-// Build overall project summary
 function buildProjectSummary(project: any, takeoff: any[], labor: any[], assumptions: any[], rfis: any[]): string {
   if (!project) return 'No project selected.';
   
   const takeoffTotal = takeoff.reduce((sum, i) => sum + (i.extended_cost || 0), 0);
   const laborTotal = labor.reduce((sum, i) => sum + (i.extended || 0), 0);
-  const draftCount = takeoff.filter(i => i.draft).length;
-  const openRfis = rfis.filter(r => r.status !== 'closed').length;
   
-  return `
-Project: ${project.name}
-Status: ${project.status || 'Active'}
-Address: ${project.address || 'Not set'}
-
-Settings:
-- Markup: ${project.markup_percent || 0}%
-- Tax: ${project.tax_percent || 0}%
-- Waste Factor: ${project.waste_percent || 0}%
-- Labor Burden: ${project.labor_burden_percent || 0}%
-
-Current Totals:
-- Takeoff Items: ${takeoff.length} (${draftCount} are drafts)
-- Material Cost: $${takeoffTotal.toLocaleString()}
-- Labor Cost: $${laborTotal.toLocaleString()}
-- Combined: $${(takeoffTotal + laborTotal).toLocaleString()}
-- Assumptions: ${assumptions.length}
-- Open RFIs: ${openRfis}
-`;
+  return `Project: ${project.name}
+Markup: ${project.markup_percent || 0}% | Tax: ${project.tax_percent || 0}% | Waste: ${project.waste_percent || 0}%
+Items: ${takeoff.length} | Material: $${takeoffTotal.toLocaleString()} | Labor: $${laborTotal.toLocaleString()}`;
 }
 
-// Pattern-based fallback
 function parseWithPatterns(message: string): ParseResult {
   const lower = message.toLowerCase();
   const actions: ParsedAction[] = [];
 
-  // Export
-  if (/export.*pdf|download.*pdf/i.test(lower)) {
+  if (/export.*pdf/i.test(lower)) {
     actions.push({ type: 'export.pdf', params: {}, confidence: 0.9 });
   }
   if (/export.*csv/i.test(lower)) {
     actions.push({ type: 'export.csv', params: { which: 'takeoff' }, confidence: 0.9 });
   }
-
-  // Drafts
   if (/promote.*draft|finalize/i.test(lower)) {
     actions.push({ type: 'takeoff.promote_drafts', params: { scope: 'all' }, confidence: 0.85 });
   }
-  if (/delete.*draft|clear.*draft/i.test(lower)) {
+  if (/delete.*draft/i.test(lower)) {
     actions.push({ type: 'takeoff.delete_drafts', params: { scope: 'all' }, confidence: 0.85 });
   }
 
-  // Settings
   const markupMatch = /markup.*?(\d+)/i.exec(lower);
   const taxMatch = /tax.*?(\d+)/i.exec(lower);
   const wasteMatch = /waste.*?(\d+)/i.exec(lower);
@@ -481,18 +423,11 @@ function parseWithPatterns(message: string): ParseResult {
     actions.push({ type: 'project.set_defaults', params, confidence: 0.9 });
   }
 
-  // QA
-  if (/show.*(?:qa|issues)|review/i.test(lower)) {
+  if (/show.*(?:qa|issues)/i.test(lower)) {
     actions.push({ type: 'qa.show_issues', params: {}, confidence: 0.9 });
   }
-
-  // Help
   if (/help|what can/i.test(lower)) {
-    return {
-      success: true,
-      actions: [{ type: 'system.capabilities', params: {}, confidence: 1 }],
-      followUpQuestions: [],
-    };
+    return { success: true, actions: [{ type: 'system.capabilities', params: {}, confidence: 1 }], followUpQuestions: [] };
   }
 
   if (actions.length === 0) {
@@ -500,7 +435,7 @@ function parseWithPatterns(message: string): ParseResult {
       success: false,
       actions: [],
       followUpQuestions: [],
-      message: "I need more specific information to help. You can describe your project scope (e.g., '1000 SF basement with 3 rooms'), ask about what's in this project, or give a direct command like 'set markup to 20%'.",
+      message: "Give me dimensions (e.g., '20×30 basement room') or a direct command (e.g., 'set markup to 20%').",
     };
   }
 
