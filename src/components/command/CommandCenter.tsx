@@ -114,7 +114,7 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
   const [showMoneyConfirm, setShowMoneyConfirm] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Voice input with enhanced status
   const { 
@@ -535,15 +535,23 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
               </div>
             )}
 
-            {/* Input */}
-            <form onSubmit={handleSubmit} className="flex gap-2">
-              <Input
+            {/* Input - Textarea for multi-line dictation */}
+            <form onSubmit={handleSubmit} className="flex gap-2 items-end">
+              <textarea
                 ref={inputRef}
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                placeholder={projectId ? "Type a command..." : "Create project [name]..."}
-                className="flex-1"
+                onKeyDown={(e) => {
+                  // Submit on Enter (without Shift)
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmit();
+                  }
+                }}
+                placeholder={projectId ? "Type or speak a command..." : "Select a project first..."}
+                className="flex-1 min-h-[44px] max-h-[120px] resize-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={isExecuting || !!pendingActions}
+                rows={Math.min(4, Math.max(1, inputValue.split('\n').length))}
               />
               
               {voiceSupported && (
