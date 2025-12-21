@@ -1,5 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -19,8 +20,49 @@ interface ParseResult {
   message?: string;
 }
 
+// Construction knowledge embedded in the function
+const CONSTRUCTION_KNOWLEDGE = `
+## MATERIAL COVERAGE RATES
+- Drywall (4x8 sheet): covers 32 SF, typical waste 10%
+- Formula: sheets needed = (wall SF + ceiling SF) / 32 * 1.10
+- Studs (16" OC): 0.75 studs per linear foot of wall
+- R-13 insulation: 1 SF per SF of wall, 5% waste
+- LVP flooring: 1 SF per SF of floor, 10% waste
+- Baseboard: 1 LF per LF of perimeter, 10% waste
+
+## TYPICAL QUANTITIES FOR BASEMENT FINISH (1000 SF example)
+- Wall framing: ~150 LF of walls = ~113 studs + plates
+- Drywall: ~1800 SF (walls + ceiling) = ~62 sheets
+- Insulation: ~1200 SF of walls = ~1260 SF of R-13
+- Outlets: 1 per 80 SF = ~12-15 outlets
+- Recessed lights: 1 per 50 SF = ~20 lights
+- Flooring: 1000 SF + 10% = ~1100 SF
+
+## ESTIMATING FORMULAS
+- Wall SF = wall LF × wall height
+- Perimeter LF ≈ 2 × (length + width)
+- For rectangular room: perimeter ≈ 4 × sqrt(floor SF)
+- Ceiling SF = floor SF (typically)
+
+## TRADES & CATEGORIES
+- Framing: studs, plates, headers, blocking
+- Drywall: sheets, mud, tape, screws, corner bead
+- Electrical: outlets, switches, lights, wire, boxes, panel
+- Plumbing: fixtures, pipe, fittings, valves
+- Flooring: LVP, carpet, tile, underlayment, transitions
+- Insulation: batts, foam, vapor barrier
+- Trim: baseboard, casing, crown, doors
+
+## TYPICAL COSTS (material only, installed is 2-3x)
+- Drywall sheet: $10-18
+- 2x4 stud: $3-8
+- Outlet installed: $75-150
+- Recessed light installed: $100-250
+- LVP per SF: $2-8
+- Baseboard per LF: $3-10
+`;
+
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -36,53 +78,111 @@ serve(async (req) => {
     }
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+    // Fetch project data if we have a projectId
+    let projectData = null;
+    let takeoffSummary = '';
+    
+    if (projectContext?.projectId && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      
+      // Get project details
+      const { data: project } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', projectContext.projectId)
+        .single();
+      
+      if (project) {
+        projectData = project;
+        
+        // Get takeoff items summary
+        const { data: takeoffItems } = await supabase
+          .from('takeoff_items')
+          .select('category, description, quantity, unit, unit_cost, draft')
+          .eq('project_id', projectContext.projectId)
+          .limit(50);
+        
+        if (takeoffItems && takeoffItems.length > 0) {
+          const byCategory = takeoffItems.reduce((acc: Record<string, typeof takeoffItems>, item) => {
+            acc[item.category] = acc[item.category] || [];
+            acc[item.category].push(item);
+            return acc;
+          }, {});
+          
+          takeoffSummary = Object.entries(byCategory)
+            .map(([cat, items]) => `${cat}: ${items.length} items`)
+            .join(', ');
+        }
+      }
+    }
+
+    console.log('[AI Parse] Input:', message);
+    console.log('[AI Parse] Project:', projectData?.name);
+    console.log('[AI Parse] Takeoff:', takeoffSummary);
+
     if (!LOVABLE_API_KEY) {
-      console.error('[AI Parse] LOVABLE_API_KEY not configured, using fallback');
-      // Fallback to simple patterns
+      console.log('[AI Parse] No API key, using pattern fallback');
       return new Response(
-        JSON.stringify(parseWithSimplePatterns(message)),
+        JSON.stringify(parseWithPatterns(message)),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('[AI Parse] Input:', message);
-    console.log('[AI Parse] Context:', projectContext);
+    const systemPrompt = `You are an AI assistant for a construction estimating application. You understand construction trades, materials, quantities, and estimating practices.
 
-    const systemPrompt = `You are a command parser for a construction estimating application. Convert natural language into structured actions.
+${CONSTRUCTION_KNOWLEDGE}
 
-Available action types:
-- project.create: Create a new project. Params: { name: string }
-- project.set_defaults: Set project defaults. Params: { markup_percent?, tax_percent?, labor_burden_percent?, waste_percent? }
-- takeoff.add_item: Add a takeoff item. Params: { description: string, quantity: number, unit: string, unit_cost?: number, category?: string }
-- takeoff.generate_drafts_from_assemblies: Generate draft items from assemblies. Params: { assemblies: string[] }
-- takeoff.promote_drafts: Promote draft items to final. Params: { scope: 'all' | 'selected' }
-- takeoff.delete_drafts: Delete draft items. Params: { scope: 'all' | 'selected' }
-- export.pdf: Export project as PDF. Params: {}
-- export.csv: Export as CSV. Params: { which: 'takeoff' | 'labor' | 'all' }
+## CURRENT PROJECT CONTEXT
+${projectData ? `
+Project: ${projectData.name}
+Markup: ${projectData.markup_percent || 0}%
+Tax: ${projectData.tax_percent || 0}%
+Waste: ${projectData.waste_percent || 0}%
+Labor Burden: ${projectData.labor_burden_percent || 0}%
+Current Takeoff: ${takeoffSummary || 'No items yet'}
+` : 'No project selected'}
+
+## YOUR CAPABILITIES
+You can help users by:
+1. Suggesting what materials they need based on scope (e.g., "I'm finishing a 1000 SF basement")
+2. Calculating quantities using the formulas above
+3. Converting their natural language into structured actions
+4. Asking clarifying questions when information is missing
+
+## AVAILABLE ACTIONS
+- project.set_defaults: Set markup, tax, waste, or burden. Params: { markup_percent?, tax_percent?, waste_percent?, labor_burden_percent? }
+- takeoff.add_item: Add material. Params: { description, quantity, unit, unit_cost?, category? }
+- takeoff.add_multiple: Add multiple items. Params: { items: [{ description, quantity, unit, unit_cost?, category }] }
+- takeoff.generate_drafts_from_assemblies: Generate from assembly templates. Params: { assemblies: string[], variables?: { floorSF?, wallLF?, wallHeight?, roomCount? } }
+- takeoff.promote_drafts: Finalize drafts. Params: { scope: 'all' }
+- takeoff.delete_drafts: Delete drafts. Params: { scope: 'all' }
+- export.pdf: Export PDF. Params: {}
+- export.csv: Export CSV. Params: { which: 'takeoff' | 'labor' | 'all' }
 - qa.show_issues: Show QA issues. Params: {}
-- plans.open: Open plan files. Params: { plan_file_id?: string, page?: number }
-- labor.add_task_line: Add labor task. Params: { task_name: string, quantity: number, unit: string, rate?: number }
 
-Rules:
-1. Extract the user's intent and map to available actions
-2. If info is missing, include follow-up questions  
-3. Be generous in interpretation - "add some drywall" means add a takeoff item
-4. Numbers can be spelled out (e.g., "fifteen percent" = 15)
-5. Common abbreviations: sqft/sf = square feet, lf = linear feet, ea = each
-6. If you can't determine the action, return success: false with a helpful message
-7. Multiple commands can be in one sentence (e.g., "set markup 20 and export pdf")
-
-Respond with JSON only (no markdown):
+## RESPONSE FORMAT
+Always respond with valid JSON (no markdown):
 {
-  "success": boolean,
+  "success": true/false,
   "actions": [{ "type": "action.type", "params": {...}, "confidence": 0.0-1.0 }],
-  "followUpQuestions": ["question1?"],
-  "message": "optional explanation"
-}`;
+  "followUpQuestions": ["clarifying question?"],
+  "message": "Brief explanation of what you're proposing",
+  "suggestions": ["related thing you might want to do next"]
+}
 
-    const userPrompt = `Parse this command: "${message}"
+## IMPORTANT RULES
+1. When user describes scope (e.g., "1000 SF basement"), calculate quantities and propose takeoff.add_multiple
+2. Use the formulas above to estimate - be specific with numbers
+3. If you need more info, ask in followUpQuestions
+4. Be conversational but action-oriented
+5. When adding items, ALWAYS include calculated quantities based on scope`;
 
-Project context: ${JSON.stringify(projectContext || { projectId: null })}`;
+    const userPrompt = `User says: "${message}"
+
+Based on the project context and construction knowledge, determine what actions to take. If the user is describing a scope or project, calculate the materials needed and propose adding them as takeoff items.`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -105,21 +205,19 @@ Project context: ${JSON.stringify(projectContext || { projectId: null })}`;
       
       if (response.status === 429) {
         return new Response(
-          JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }),
+          JSON.stringify({ error: 'Rate limit exceeded. Try again in a moment.' }),
           { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       if (response.status === 402) {
         return new Response(
-          JSON.stringify({ error: 'AI credits exhausted. Please add credits to continue.' }),
+          JSON.stringify({ error: 'AI credits exhausted.' }),
           { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       
-      // Fallback to simple patterns on error
-      console.log('[AI Parse] Falling back to simple patterns');
       return new Response(
-        JSON.stringify(parseWithSimplePatterns(message)),
+        JSON.stringify(parseWithPatterns(message)),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -131,35 +229,34 @@ Project context: ${JSON.stringify(projectContext || { projectId: null })}`;
 
     if (!content) {
       return new Response(
-        JSON.stringify(parseWithSimplePatterns(message)),
+        JSON.stringify(parseWithPatterns(message)),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Parse the JSON response, handling markdown code blocks
     let parsed: ParseResult;
     try {
       let jsonStr = content.trim();
-      if (jsonStr.startsWith('```json')) {
-        jsonStr = jsonStr.slice(7);
-      } else if (jsonStr.startsWith('```')) {
-        jsonStr = jsonStr.slice(3);
-      }
-      if (jsonStr.endsWith('```')) {
-        jsonStr = jsonStr.slice(0, -3);
-      }
+      if (jsonStr.startsWith('```json')) jsonStr = jsonStr.slice(7);
+      else if (jsonStr.startsWith('```')) jsonStr = jsonStr.slice(3);
+      if (jsonStr.endsWith('```')) jsonStr = jsonStr.slice(0, -3);
       
       parsed = JSON.parse(jsonStr.trim());
     } catch (e) {
-      console.error('[AI Parse] Failed to parse JSON:', e, content);
+      console.error('[AI Parse] JSON parse failed:', e);
+      // Try to extract just the message for conversational response
       return new Response(
-        JSON.stringify(parseWithSimplePatterns(message)),
+        JSON.stringify({
+          success: false,
+          actions: [],
+          followUpQuestions: [],
+          message: content.slice(0, 500),
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('[AI Parse] Parsed result:', parsed);
-
+    console.log('[AI Parse] Success:', parsed);
     return new Response(
       JSON.stringify(parsed),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -174,104 +271,51 @@ Project context: ${JSON.stringify(projectContext || { projectId: null })}`;
   }
 });
 
-// Simple pattern-based parsing (fallback when LLM unavailable)
-function parseWithSimplePatterns(message: string): ParseResult {
+// Pattern-based fallback
+function parseWithPatterns(message: string): ParseResult {
   const lower = message.toLowerCase();
   const actions: ParsedAction[] = [];
-  const questions: string[] = [];
 
-  // Export patterns
-  if (/export.*pdf|pdf.*export|download.*pdf/i.test(lower)) {
+  // Export
+  if (/export.*pdf|download.*pdf/i.test(lower)) {
     actions.push({ type: 'export.pdf', params: {}, confidence: 0.9 });
   }
-  
-  if (/export.*csv|csv.*export/i.test(lower)) {
+  if (/export.*csv/i.test(lower)) {
     actions.push({ type: 'export.csv', params: { which: 'takeoff' }, confidence: 0.9 });
   }
 
-  // Promote drafts
-  if (/promote.*draft|finalize|make.*active|approve.*draft/i.test(lower)) {
+  // Drafts
+  if (/promote.*draft|finalize/i.test(lower)) {
     actions.push({ type: 'takeoff.promote_drafts', params: { scope: 'all' }, confidence: 0.85 });
   }
-
-  // Delete drafts
-  if (/delete.*draft|remove.*draft|clear.*draft/i.test(lower)) {
+  if (/delete.*draft|clear.*draft/i.test(lower)) {
     actions.push({ type: 'takeoff.delete_drafts', params: { scope: 'all' }, confidence: 0.85 });
   }
 
-  // Set markup/tax/waste/burden - handle multiple in one command
-  const markupMatch = /markup.*?(\d+)\s*%?/i.exec(lower);
-  const taxMatch = /tax.*?(\d+)\s*%?/i.exec(lower);
-  const wasteMatch = /waste.*?(\d+)\s*%?/i.exec(lower);
-  const burdenMatch = /burden.*?(\d+)\s*%?/i.exec(lower);
+  // Settings
+  const markupMatch = /markup.*?(\d+)/i.exec(lower);
+  const taxMatch = /tax.*?(\d+)/i.exec(lower);
+  const wasteMatch = /waste.*?(\d+)/i.exec(lower);
   
-  if (markupMatch || taxMatch || wasteMatch || burdenMatch) {
+  if (markupMatch || taxMatch || wasteMatch) {
     const params: Record<string, number> = {};
     if (markupMatch) params.markup_percent = parseInt(markupMatch[1]);
     if (taxMatch) params.tax_percent = parseInt(taxMatch[1]);
     if (wasteMatch) params.waste_percent = parseInt(wasteMatch[1]);
-    if (burdenMatch) params.labor_burden_percent = parseInt(burdenMatch[1]);
-    
     actions.push({ type: 'project.set_defaults', params, confidence: 0.9 });
   }
 
-  // QA issues
-  if (/show.*(?:qa|issues|problems)|check.*quality|review/i.test(lower)) {
+  // QA
+  if (/show.*(?:qa|issues)|review/i.test(lower)) {
     actions.push({ type: 'qa.show_issues', params: {}, confidence: 0.9 });
   }
 
-  // Add takeoff item patterns
-  const addMatch = /add\s+(?:(?:some|more)\s+)?(.+?)\s+(\d+(?:\.\d+)?)\s*(sf|sqft|lf|ea|each|square\s*feet?|linear\s*feet?)/i.exec(lower);
-  if (addMatch) {
-    const unitMap: Record<string, string> = {
-      'sf': 'SF', 'sqft': 'SF', 'square feet': 'SF', 'square foot': 'SF',
-      'lf': 'LF', 'linear feet': 'LF', 'linear foot': 'LF',
-      'ea': 'EA', 'each': 'EA'
-    };
-    actions.push({
-      type: 'takeoff.add_item',
-      params: {
-        description: addMatch[1].trim(),
-        quantity: parseFloat(addMatch[2]),
-        unit: unitMap[addMatch[3].toLowerCase()] || 'EA',
-        category: 'General'
-      },
-      confidence: 0.8
-    });
-  }
-
-  // Generate from assemblies
-  if (/generate.*(?:draft|takeoff)|create.*from.*assembl/i.test(lower)) {
-    const assemblies: string[] = [];
-    if (/framing/i.test(lower)) assemblies.push('framing');
-    if (/drywall/i.test(lower)) assemblies.push('drywall');
-    if (/electrical/i.test(lower)) assemblies.push('electrical');
-    if (/plumbing/i.test(lower)) assemblies.push('plumbing');
-    if (/flooring/i.test(lower)) assemblies.push('flooring');
-    
-    if (assemblies.length > 0) {
-      actions.push({
-        type: 'takeoff.generate_drafts_from_assemblies',
-        params: { assemblies },
-        confidence: 0.85
-      });
-    } else {
-      questions.push('Which assemblies would you like to use? (e.g., framing, drywall, electrical)');
-    }
-  }
-
-  // Open plans
-  if (/open.*plan|view.*plan|show.*plan/i.test(lower)) {
-    actions.push({ type: 'plans.open', params: {}, confidence: 0.8 });
-  }
-
   // Help
-  if (/help|what can you do|\?$/i.test(lower)) {
+  if (/help|what can/i.test(lower)) {
     return {
       success: true,
       actions: [{ type: 'system.capabilities', params: {}, confidence: 1 }],
       followUpQuestions: [],
-      message: 'Showing available commands'
     };
   }
 
@@ -280,13 +324,9 @@ function parseWithSimplePatterns(message: string): ParseResult {
       success: false,
       actions: [],
       followUpQuestions: [],
-      message: 'I couldn\'t understand that. Try something like "set markup 20%" or "add drywall 500 sf" or "export PDF".'
+      message: 'I need more details. Try describing your project scope (e.g., "I\'m finishing a 1000 SF basement") or a specific action (e.g., "set markup to 20%").',
     };
   }
 
-  return {
-    success: true,
-    actions,
-    followUpQuestions: questions
-  };
+  return { success: true, actions, followUpQuestions: [] };
 }
