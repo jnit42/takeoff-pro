@@ -651,11 +651,25 @@ function formatActionPreview(action: ParsedAction): string {
       return `Set ${updates}`;
     }
     case 'takeoff.add_item':
-      return `Add takeoff: ${action.params.description} (${action.params.quantity} ${action.params.unit})`;
+      return `Add: ${action.params.description} (${action.params.quantity} ${action.params.unit})`;
+    case 'takeoff.add_multiple': {
+      const items = action.params.items as Array<{ description: string; quantity: number; unit: string; category?: string }>;
+      if (!items || items.length === 0) return 'Add multiple items (none specified)';
+      
+      const itemList = items.map(item => 
+        `  → ${item.description}: ${item.quantity} ${item.unit}${item.category ? ` [${item.category}]` : ''}`
+      ).join('\n');
+      
+      return `Add ${items.length} items:\n${itemList}`;
+    }
+    case 'takeoff.update_item':
+      return `Update item: ${JSON.stringify(action.params.updates)}`;
+    case 'takeoff.delete_item':
+      return `Delete item (ID: ${action.params.id})`;
     case 'takeoff.generate_drafts_from_assemblies':
       return `Generate drafts from ${(action.params.assemblies as string[]).join(', ')}`;
     case 'takeoff.promote_drafts':
-      return `Promote ${action.params.scope === 'all' ? 'all' : 'selected'} drafts`;
+      return `Promote ${action.params.scope === 'all' ? 'all' : 'selected'} drafts to final`;
     case 'takeoff.delete_drafts':
       return `Delete ${action.params.scope === 'all' ? 'all' : 'selected'} drafts`;
     case 'labor.add_task_line':
@@ -666,6 +680,12 @@ function formatActionPreview(action: ParsedAction): string {
       return `Export ${action.params.which} CSV`;
     case 'qa.show_issues':
       return 'Show QA issues';
+    case 'navigate.plans':
+      return 'Open Plans viewer';
+    case 'navigate.takeoff':
+      return 'Open Takeoff builder';
+    case 'navigate.labor':
+      return 'Open Labor estimator';
     default:
       return action.type;
   }
