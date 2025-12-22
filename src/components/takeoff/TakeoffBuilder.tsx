@@ -29,7 +29,6 @@ import { PlanLinkBadge } from './PlanLinkBadge';
 import { OverrideBadge } from './OverrideBadge';
 import { TradeCard } from './TradeCard';
 import { ValueCard } from './ValueCard';
-import { MagicInput } from './MagicInput';
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import {
   Table,
@@ -766,7 +765,7 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
   // ========================================
   if (isMobile) {
     return (
-      <div className="space-y-4 pb-24">
+      <div className="space-y-4 px-4 py-4">
         {/* Value Card - Top of screen */}
         <ValueCard
           subtotal={subtotal}
@@ -793,25 +792,20 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
             />
           ))}
 
-          {/* Empty state - Add first category */}
+          {/* Empty state */}
           {Object.keys(itemsByCategory).length === 0 && (
-            <Card className="p-8 text-center">
-              <p className="text-muted-foreground mb-4">No items yet</p>
-              <p className="text-sm text-muted-foreground mb-4">
-                Tap the button below to describe what you need
+            <div className="py-12 text-center">
+              <p className="text-lg font-medium text-muted-foreground mb-2">No items yet</p>
+              <p className="text-sm text-muted-foreground">
+                Tap the <span className="text-primary font-semibold">+</span> button below to describe what you need
               </p>
-            </Card>
+            </div>
           )}
         </div>
-
-        {/* Magic Input FAB */}
-        <MagicInput 
-          onSubmit={handleAISubmit}
-          isProcessing={isAIProcessing}
-        />
       </div>
     );
   }
+
 
   // ========================================
   // DESKTOP TABLE VIEW (Original)
