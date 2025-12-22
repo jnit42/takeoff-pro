@@ -56,6 +56,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
 interface SubcontractorManagerProps {
+  projectId?: string;
   className?: string;
 }
 
@@ -81,7 +82,7 @@ const TRADES = [
   'general', 'other'
 ];
 
-export function SubcontractorManager({ className }: SubcontractorManagerProps) {
+export function SubcontractorManager({ projectId, className }: SubcontractorManagerProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
