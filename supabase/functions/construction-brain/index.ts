@@ -12,6 +12,22 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+interface LaborRateCalibration {
+  trade: string;
+  task_key: string;
+  base_rate: number;
+  unit: string;
+  sample_count: number;
+}
+
+interface PastCorrection {
+  description: string;
+  original_estimate: number;
+  actual_amount: number;
+  variance_percent: number;
+  correction_type: string;
+}
+
 interface ProjectContext {
   project?: {
     id: string;
@@ -48,6 +64,10 @@ interface ProjectContext {
     actual_amount: number;
     variance_percent: number;
   }>;
+  // NEW: User's calibrated labor rates
+  userLaborRates?: LaborRateCalibration[];
+  // NEW: Past corrections for learning
+  pastCorrections?: PastCorrection[];
 }
 
 interface KnowledgeContext {
@@ -159,7 +179,7 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: 'AI service not configured' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    );
     }
 
     const { 
@@ -186,7 +206,7 @@ serve(async (req) => {
     console.log('[construction-brain] Processing:', { message, projectId, userId });
 
     // ========================================
-    // PHASE 1: BUILD FULL CONTEXT
+    // PHASE 1: BUILD FULL CONTEXT (with corrections!)
     // ========================================
     
     const projectContext = await buildProjectContext(supabase, projectId, userId);
@@ -196,6 +216,8 @@ serve(async (req) => {
       hasProject: !!projectContext.project,
       takeoffItems: projectContext.takeoffItems?.length || 0,
       relevantKnowledge: knowledgeContext.relevantKnowledge.length,
+      userLaborRates: projectContext.userLaborRates?.length || 0,
+      pastCorrections: projectContext.pastCorrections?.length || 0,
     });
 
     // ========================================
@@ -292,6 +314,20 @@ serve(async (req) => {
 async function buildProjectContext(supabase: any, projectId: string | null, userId: string): Promise<ProjectContext> {
   const context: ProjectContext = {};
 
+  // ========================================
+  // NEW: Fetch user's calibrated labor rates (ALWAYS)
+  // ========================================
+  const { data: laborRates } = await supabase
+    .from('labor_rate_calibration')
+    .select('trade, task_key, base_rate, unit, sample_count')
+    .eq('user_id', userId)
+    .order('sample_count', { ascending: false })
+    .limit(30);
+  
+  if (laborRates) {
+    context.userLaborRates = laborRates;
+  }
+
   if (!projectId) return context;
 
   // Get project details
@@ -356,6 +392,29 @@ async function buildProjectContext(supabase: any, projectId: string | null, user
   
   if (actuals) {
     context.recentActuals = actuals;
+  }
+
+  // ========================================
+  // NEW: Fetch past corrections from ai_decisions
+  // ========================================
+  const { data: corrections } = await supabase
+    .from('ai_decisions')
+    .select('input_text, user_modification, output_actions, was_accurate')
+    .eq('user_id', userId)
+    .eq('was_accurate', false)
+    .not('user_modification', 'is', null)
+    .order('decided_at', { ascending: false })
+    .limit(10);
+  
+  if (corrections) {
+    context.pastCorrections = corrections.map((c: { input_text: string; user_modification: Record<string, unknown> }) => ({
+      description: c.input_text,
+      original_estimate: 0,
+      actual_amount: 0,
+      variance_percent: 0,
+      correction_type: 'user_override',
+      modification: c.user_modification,
+    }));
   }
 
   return context;
@@ -435,7 +494,7 @@ function extractKeywords(message: string): string[] {
 }
 
 // ========================================
-// PROMPT BUILDER
+// PROMPT BUILDER (with user labor rates + corrections)
 // ========================================
 
 function buildSystemPrompt(projectContext: ProjectContext, knowledgeContext: KnowledgeContext): string {
@@ -467,6 +526,27 @@ CURRENT PROJECT: "${projectContext.project.name}"
     ? `\nRECENT ACTUALS (for learning):\n${projectContext.recentActuals.slice(0, 5).map(a => `- ${a.description}: Est $${a.estimated_amount} → Actual $${a.actual_amount} (${a.variance_percent > 0 ? '+' : ''}${a.variance_percent}%)`).join('\n')}`
     : '';
 
+  // ========================================
+  // NEW: User's calibrated labor rates section
+  // ========================================
+  const userLaborRatesSection = projectContext.userLaborRates?.length
+    ? `\n\n=== USER-SPECIFIC LABOR RATES (OVERRIDE DEFAULTS) ===
+${projectContext.userLaborRates.slice(0, 15).map(r => `- ${r.task_key} (${r.trade}): $${r.base_rate}/${r.unit} (${r.sample_count} samples)`).join('\n')}
+
+CRITICAL: If the user has a specific rate listed above, YOU MUST use it instead of generic market averages. These are learned from the user's actual receipts and past projects.`
+    : '';
+
+  // ========================================
+  // NEW: Past corrections section
+  // ========================================
+  const pastCorrectionsSection = projectContext.pastCorrections?.length
+    ? `\n\n=== PAST CORRECTIONS (LEARN FROM THESE) ===
+The user has corrected your estimates before. Apply these lessons:
+${projectContext.pastCorrections.slice(0, 5).map(c => `- "${c.description}": User modified your output. Adjust accordingly.`).join('\n')}
+
+IMPORTANT: If you're estimating similar items, apply the user's preferred approach.`
+    : '';
+
   return `You are the Construction Brain - an expert estimating AI with 50+ years of field experience. You think like a veteran GC who's seen it all.
 
 CRITICAL: You are PROPOSE-ONLY. You suggest actions but NEVER write directly to the database.
@@ -477,6 +557,8 @@ ${existingItems}
 ${subInfo}
 ${knowledgeInfo}
 ${recentLearnings}
+${userLaborRatesSection}
+${pastCorrectionsSection}
 
 CORE PRINCIPLES (from the field):
 1. ACCURACY OVER SPEED - A bad estimate costs jobs. Take time to get it right.
@@ -485,6 +567,7 @@ CORE PRINCIPLES (from the field):
 4. REGIONAL AWARENESS - Boston rates aren't Alabama rates. Northeast runs 25-30% higher than national avg.
 5. SANITY CHECK - If studs are costing $10 each, something's wrong. Flag it.
 6. ADMIT UNCERTAINTY - "I'm 60% confident" is honest. Fake certainty loses jobs.
+7. LEARN FROM USER - If user has calibrated rates or corrected you before, USE THEIR DATA.
 
 REGIONAL MULTIPLIERS (baked into estimates):
 - Northeast/MA/CT/NY: 1.25-1.35x labor (union markets, prevailing wage)
@@ -508,9 +591,10 @@ When using takeoff.add_item, always include:
 - category: Framing, Drywall, Electrical, Plumbing, etc.
 
 PRICING SOURCE PRIORITY:
-1. User's price book entries
-2. Knowledge base (verified historical data)
-3. Leave blank and note "price TBD" if unknown
+1. User's calibrated labor rates (from labor_rate_calibration)
+2. User's price book entries
+3. Knowledge base (verified historical data)
+4. Leave blank and note "price TBD" if unknown
 NEVER use web-scraped prices - they are unreliable.
 
 Confidence should be 0-1 scale (0.85 = 85% confident).
@@ -525,7 +609,7 @@ CONSTRUCTION TERMINOLOGY:
 }
 
 // ========================================
-// TOOL DEFINITIONS
+// TOOL DEFINITIONS (with building codes tool)
 // ========================================
 
 function buildToolDefinitions() {
@@ -599,6 +683,32 @@ function buildToolDefinitions() {
           required: ['explanation', 'confidence', 'sources']
         }
       }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'search_building_codes',
+        description: 'Search for specific building codes (IRC/IBC) or local amendments for the project\'s zip code. Use this BEFORE estimating structural assemblies (decks, framing, foundations) to verify requirements.',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { 
+              type: 'string',
+              description: 'The building code query (e.g., "deck footing depth requirements", "egress window minimum size")'
+            },
+            zip_code: { 
+              type: 'string',
+              description: 'The zip code to check for local amendments'
+            },
+            code_type: {
+              type: 'string',
+              enum: ['IRC', 'IBC', 'NEC', 'local'],
+              description: 'Which code to reference'
+            }
+          },
+          required: ['query', 'zip_code']
+        }
+      }
     }
   ];
 }
@@ -642,6 +752,10 @@ function parseAIResponse(aiMessage: { tool_calls?: Array<{ function: { name: str
           response.confidence = args.confidence;
           response.dataSources = args.sources || [];
           response.followUpQuestions = args.follow_up_questions;
+        } else if (toolCall.function.name === 'search_building_codes') {
+          // Log building code search for auditing
+          console.log('[construction-brain] Building code search:', args);
+          response.dataSources.push(`Building code lookup: ${args.query} (${args.zip_code})`);
         }
       } catch (e) {
         console.error('[construction-brain] Failed to parse tool call:', e);

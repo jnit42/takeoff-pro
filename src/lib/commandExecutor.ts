@@ -64,6 +64,9 @@ export async function executeAction(
       case 'project.set_defaults':
         return await executeProjectSetDefaults(action.params, context);
 
+      case 'project.log_payment':
+        return await executeLogPayment(action.params, context);
+
       case 'takeoff.add_item':
         return await executeTakeoffAddItem(action.params, context);
 
@@ -302,6 +305,79 @@ async function executeProjectSetDefaults(
     data: updates,
     undoable: true,
     undoData: { projectId: context.projectId, previous: current },
+  };
+}
+
+/**
+ * Quick Log Payment - "Paid Jose $500 for demo"
+ */
+async function executeLogPayment(
+  params: Record<string, unknown>,
+  context: ExecutionContext
+): Promise<ExecutionResult> {
+  if (!context.projectId) {
+    throw new Error('No project selected. Please open a project first.');
+  }
+
+  const paidTo = params.paid_to as string;
+  const amount = params.amount as number;
+  const description = params.description as string;
+  const category = (params.category as string) || 'Labor';
+  const trade = params.trade as string;
+
+  // Insert into project_actuals for budget tracking
+  const { data: actual, error: actualError } = await supabase
+    .from('project_actuals')
+    .insert({
+      project_id: context.projectId,
+      category,
+      description: `${paidTo}: ${description}`,
+      estimated_amount: 0,
+      estimated_qty: 1,
+      estimated_unit: 'JOB',
+      actual_amount: amount,
+      actual_qty: 1,
+      actual_unit: 'JOB',
+      paid_to: paidTo,
+      paid_date: new Date().toISOString().split('T')[0],
+      notes: `Quick logged via command`,
+    })
+    .select()
+    .single();
+
+  if (actualError) throw actualError;
+
+  // Also learn this as a labor rate if it looks like labor
+  const laborKeywords = ['demo', 'install', 'labor', 'work', 'finish', 'frame', 'paint', 'tile', 'electric', 'plumb'];
+  const isLabor = laborKeywords.some(k => description.toLowerCase().includes(k));
+
+  if (isLabor && trade) {
+    const taskKey = description.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim().replace(/\s+/g, '_');
+    
+    await supabase
+      .from('labor_rate_calibration')
+      .upsert({
+        user_id: context.userId,
+        trade,
+        task_key: taskKey,
+        base_rate: amount,
+        unit: 'JOB',
+        sample_count: 1,
+        last_used_at: new Date().toISOString(),
+        modifiers_json: { source: 'quick_log', paid_to: paidTo }
+      }, {
+        onConflict: 'user_id,trade,task_key',
+        ignoreDuplicates: false
+      });
+  }
+
+  return {
+    success: true,
+    actionType: 'project.log_payment',
+    message: `Logged: Paid ${paidTo} $${amount} for ${description}`,
+    data: { actualId: actual.id, amount, paidTo },
+    undoable: true,
+    undoData: { actualId: actual.id },
   };
 }
 

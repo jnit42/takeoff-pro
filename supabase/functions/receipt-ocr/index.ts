@@ -2,6 +2,7 @@
  * Receipt OCR Edge Function
  * Uses Lovable AI (Gemini Vision) to extract structured data from receipt/invoice images
  * SECURITY: Requires JWT auth, verifies project ownership before writing
+ * LEARNING: Automatically learns labor rates from parsed receipts
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -31,6 +32,14 @@ interface ExtractionResult {
   confidence: number;
   raw_text: string;
 }
+
+// Labor keywords for detecting labor line items
+const LABOR_KEYWORDS = [
+  'labor', 'install', 'demo', 'demolition', 'hour', 'hrs', 'hr',
+  'service', 'work', 'repair', 'maintenance', 'finish', 'hang',
+  'tape', 'mud', 'sand', 'paint', 'frame', 'framing', 'electric',
+  'plumb', 'plumbing', 'hvac', 'rough', 'trim', 'tile', 'floor'
+];
 
 // ========================================
 // AUTHENTICATION
@@ -76,6 +85,112 @@ async function verifyProjectOwnership(userId: string, projectId: string): Promis
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (project as any)?.user_id === userId;
+}
+
+// ========================================
+// LABOR RATE LEARNING
+// ========================================
+
+function isLaborItem(description: string): boolean {
+  const lower = description.toLowerCase();
+  return LABOR_KEYWORDS.some(keyword => lower.includes(keyword));
+}
+
+function normalizeTaskKey(description: string): string {
+  // Convert "Drywall Hang & Finish" -> "drywall_hang_finish"
+  return description
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .trim()
+    .replace(/\s+/g, '_')
+    .substring(0, 50);
+}
+
+function inferTrade(description: string): string {
+  const lower = description.toLowerCase();
+  if (lower.includes('drywall') || lower.includes('sheetrock') || lower.includes('tape') || lower.includes('mud')) return 'Drywall';
+  if (lower.includes('frame') || lower.includes('stud') || lower.includes('carpent')) return 'Framing';
+  if (lower.includes('electric') || lower.includes('wire') || lower.includes('outlet')) return 'Electrical';
+  if (lower.includes('plumb') || lower.includes('pipe') || lower.includes('drain')) return 'Plumbing';
+  if (lower.includes('paint') || lower.includes('primer')) return 'Paint';
+  if (lower.includes('hvac') || lower.includes('duct') || lower.includes('heating')) return 'HVAC';
+  if (lower.includes('tile') || lower.includes('floor')) return 'Flooring';
+  if (lower.includes('demo')) return 'Demo';
+  return 'General';
+}
+
+function inferUnit(description: string, quantity: number): string {
+  const lower = description.toLowerCase();
+  if (lower.includes('hour') || lower.includes('hr')) return 'HR';
+  if (lower.includes('sf') || lower.includes('sq ft') || lower.includes('square')) return 'SF';
+  if (lower.includes('lf') || lower.includes('linear')) return 'LF';
+  if (quantity === 1) return 'JOB'; // Flat rate job
+  return 'EA';
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function learnLaborRatesFromReceipt(supabase: any, userId: string, lineItems: ExtractedLineItem[]): Promise<number> {
+  let learnedCount = 0;
+
+  for (const item of lineItems) {
+    if (!isLaborItem(item.description)) continue;
+    if (!item.unit_price || item.unit_price <= 0) continue;
+
+    const taskKey = normalizeTaskKey(item.description);
+    const trade = inferTrade(item.description);
+    const unit = inferUnit(item.description, item.quantity);
+
+    console.log(`[receipt-ocr] Learning labor rate: ${taskKey} = $${item.unit_price}/${unit}`);
+
+    // UPSERT to labor_rate_calibration
+    const { error } = await supabase
+      .from('labor_rate_calibration')
+      .upsert({
+        user_id: userId,
+        trade,
+        task_key: taskKey,
+        base_rate: item.unit_price,
+        unit,
+        sample_count: 1,
+        last_used_at: new Date().toISOString(),
+        modifiers_json: { source: 'receipt_ocr' }
+      }, {
+        onConflict: 'user_id,trade,task_key',
+        ignoreDuplicates: false
+      });
+
+    if (error) {
+      // If conflict, update with weighted average
+      const { data: existing } = await supabase
+        .from('labor_rate_calibration')
+        .select('base_rate, sample_count')
+        .eq('user_id', userId)
+        .eq('trade', trade)
+        .eq('task_key', taskKey)
+        .single();
+
+      if (existing) {
+        // Weighted average of rates
+        const newSampleCount = (existing.sample_count || 1) + 1;
+        const newRate = ((existing.base_rate * (existing.sample_count || 1)) + item.unit_price) / newSampleCount;
+
+        await supabase
+          .from('labor_rate_calibration')
+          .update({
+            base_rate: Math.round(newRate * 100) / 100,
+            sample_count: newSampleCount,
+            last_used_at: new Date().toISOString(),
+          })
+          .eq('user_id', userId)
+          .eq('trade', trade)
+          .eq('task_key', taskKey);
+      }
+    }
+
+    learnedCount++;
+  }
+
+  return learnedCount;
 }
 
 serve(async (req) => {
@@ -163,10 +278,15 @@ EXTRACTION RULES:
 4. Extract each line item with:
    - Description (product name)
    - Quantity (default 1 if not shown)
-   - Unit (EA, LF, SF, etc. - infer from context)
+   - Unit (EA, LF, SF, HR, JOB, etc. - infer from context)
    - Unit price
    - Line total
 5. Find subtotal, tax, and total amounts
+
+LABOR DETECTION:
+- Look for labor charges (installation, service, hourly work)
+- Extract hourly rates or per-unit labor costs
+- Common labor terms: Labor, Install, Demo, Service, Hour, HR, Work, Repair
 
 RESPOND WITH VALID JSON ONLY:
 {
@@ -183,6 +303,13 @@ RESPOND WITH VALID JSON ONLY:
       "unit": "EA",
       "unit_price": 3.98,
       "total": 39.80
+    },
+    {
+      "description": "Drywall Install Labor",
+      "quantity": 500,
+      "unit": "SF",
+      "unit_price": 2.50,
+      "total": 1250.00
     }
   ],
   "confidence": 0.95,
@@ -204,7 +331,7 @@ RESPOND WITH VALID JSON ONLY:
           { 
             role: 'user', 
             content: [
-              { type: 'text', text: 'Extract all data from this receipt/invoice image. Return only valid JSON.' },
+              { type: 'text', text: 'Extract all data from this receipt/invoice image. Pay special attention to labor charges and hourly rates. Return only valid JSON.' },
               imageContent
             ]
           }
@@ -262,6 +389,17 @@ RESPOND WITH VALID JSON ONLY:
       };
     }
 
+    // ========================================
+    // NEW: Learn labor rates from receipt
+    // ========================================
+    let learnedRatesCount = 0;
+    if (extracted.line_items && extracted.line_items.length > 0) {
+      learnedRatesCount = await learnLaborRatesFromReceipt(supabase, userId, extracted.line_items);
+      if (learnedRatesCount > 0) {
+        console.log(`[receipt-ocr] Learned ${learnedRatesCount} labor rates from receipt`);
+      }
+    }
+
     // Update the receipt record (ownership already verified)
     if (receiptId && projectId) {
       const { error: updateError } = await supabase
@@ -290,7 +428,11 @@ RESPOND WITH VALID JSON ONLY:
     console.log('[receipt-ocr] Extraction complete');
 
     return new Response(
-      JSON.stringify({ success: true, data: extracted }),
+      JSON.stringify({ 
+        success: true, 
+        data: extracted,
+        learned_rates: learnedRatesCount
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
