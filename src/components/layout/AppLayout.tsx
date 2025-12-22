@@ -1,5 +1,6 @@
 import { ReactNode, useState } from 'react';
 import { AppSidebar } from './AppSidebar';
+import { MobileBottomNav } from './MobileBottomNav';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -15,7 +16,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   if (isMobile) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-background pb-16">
         {/* Mobile header with hamburger */}
         <header className="sticky top-0 z-50 flex h-14 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4">
           <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
@@ -33,9 +34,11 @@ export function AppLayout({ children }: AppLayoutProps) {
             <span className="font-semibold">Takeoff + SubPay</span>
           </div>
         </header>
-        <main className="min-h-[calc(100vh-3.5rem)]">
+        <main className="min-h-[calc(100vh-3.5rem-4rem)]">
           {children}
         </main>
+        {/* Bottom Navigation */}
+        <MobileBottomNav />
       </div>
     );
   }
