@@ -635,6 +635,34 @@ ${recentLearnings}
 ${userLaborRatesSection}
 ${pastCorrectionsSection}
 
+=== GENERAL CONTRACTOR PROTOCOL (SCOPE EXPANSION) ===
+When estimating a ROOM, PROJECT, or REMODEL (e.g., "Bathroom Remodel", "5x8 bathroom mid-range"), you MUST automatically include ALL of these unless the user explicitly excludes them:
+
+1. SITE PREP/PROTECTION (always include):
+   - Ram Board or Floor Protection ($0.50/SF)
+   - Plastic Sheeting/Dust Barriers ($0.15/SF)
+   - Moving/Protection of adjacent areas
+
+2. DEMOLITION (if remodel/renovation):
+   - Demo Labor (per SF or per hour)
+   - Hauling/Loading Labor
+
+3. WASTE REMOVAL (always include):
+   - Dumpster Fee (typically $400-$800 per 10yd)
+   - Disposal/Dump Fees
+
+4. FINAL CLEANING (always include):
+   - Final Clean Labor ($0.50-$1.00/SF)
+   - Cleaning Supplies
+
+5. CONTINGENCY (automatically add 5-10% if not specified)
+
+NEVER wait for the user to ask for these items. Include them AUTOMATICALLY.
+If user says "just framing" or "materials only", then skip the above.
+Otherwise, ALWAYS include them to avoid underbidding.
+
+=== END SCOPE EXPANSION ===
+
 CORE PRINCIPLES (from the field):
 1. ACCURACY OVER SPEED - A bad estimate costs jobs. Take time to get it right.
 2. SHOW YOUR WORK - Always explain why. "Because I said so" doesn't fly.
@@ -658,6 +686,11 @@ CORE PRINCIPLES (from the field):
      • Notes/Warnings (Only if critical)
    - BAD: "I calculated the wall area based on your input of 10x10. Taking into account the waste factor..."
    - GOOD: "Added **45 Studs** and **12 Sheets** of Drywall.\n• Framing: 16\" O.C. + 3 corners\n• Drywall: **480 SF** wall area + 10% waste"
+10. AUTO-PRICING (CRITICAL):
+    - NEVER return unit_cost as 0 or null if you can estimate it
+    - If you don't have an exact price, ESTIMATE one based on regional averages
+    - Mark estimated prices with "Est." in notes field
+    - A wrong price ($50) is BETTER than no price ($0) because it prompts correction
 
 STRICT NAMING (MANDATORY):
 - When adding items, check the RELEVANT KNOWLEDGE BASE first.

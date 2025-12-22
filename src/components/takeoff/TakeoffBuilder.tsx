@@ -27,6 +27,9 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { PlanLinkBadge } from './PlanLinkBadge';
 import { OverrideBadge } from './OverrideBadge';
+import { TradeCard } from './TradeCard';
+import { ValueCard } from './ValueCard';
+import { MagicInput } from './MagicInput';
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import {
   Table,
@@ -59,6 +62,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { TAKEOFF_CATEGORIES, UNITS, formatCurrency, formatNumber, formatQuantity } from '@/lib/constants';
 
 interface TakeoffItem {
@@ -115,6 +119,7 @@ interface ItemPriceStatus {
 export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [showDrafts, setShowDrafts] = useState(true);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
@@ -124,6 +129,8 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
   const [priceLookupItem, setPriceLookupItem] = useState<TakeoffItem | null>(null);
   const [isBulkPricing, setIsBulkPricing] = useState(false);
   const [bulkPriceProgress, setBulkPriceProgress] = useState({ done: 0, total: 0 });
+  const [isAIProcessing, setIsAIProcessing] = useState(false);
+
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['takeoff-items', projectId],
     queryFn: async () => {
@@ -683,6 +690,69 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
     return acc;
   }, {} as Record<string, number>);
 
+  // Calculate markup for ValueCard
+  const markupPercent = 15; // Default, would come from project settings
+  const markup = subtotal * (markupPercent / 100);
+  const finalBid = Math.round((total + markup) / 100) * 100;
+
+  // AI Magic Input handler
+  const handleAISubmit = async (input: string, _type: 'voice' | 'text' | 'photo') => {
+    setIsAIProcessing(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('construction-brain', {
+        body: {
+          message: input,
+          projectId,
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.actions?.length > 0) {
+        // Execute actions through command executor
+        const { data: execData, error: execError } = await supabase.functions.invoke('ai-command-parse', {
+          body: {
+            command: input,
+            projectId,
+            execute: true,
+            proposedActions: data.actions,
+          }
+        });
+
+        if (execError) throw execError;
+
+        toast({
+          title: 'Items Added',
+          description: data.reasoning || `Added ${data.actions.length} items from your request`,
+        });
+
+        queryClient.invalidateQueries({ queryKey: ['takeoff-items', projectId] });
+      } else {
+        toast({
+          title: 'AI Response',
+          description: data.reasoning || 'No items to add',
+        });
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to process request';
+      toast({
+        title: 'Error',
+        description: message,
+        variant: 'destructive'
+      });
+    } finally {
+      setIsAIProcessing(false);
+    }
+  };
+
+  // Mobile card item update handler
+  const handleMobileUpdateItem = (id: string, field: string, value: string | number) => {
+    const numericFields = ['quantity', 'waste_percent', 'package_size', 'unit_cost'];
+    const finalValue = numericFields.includes(field) ? Number(value) || 0 : value;
+    updateItemMutation.mutate({ id, updates: { [field]: finalValue } });
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -691,6 +761,61 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
     );
   }
 
+  // ========================================
+  // MOBILE CARD VIEW (Handoff-style)
+  // ========================================
+  if (isMobile) {
+    return (
+      <div className="space-y-4 pb-24">
+        {/* Value Card - Top of screen */}
+        <ValueCard
+          subtotal={subtotal}
+          markup={markup}
+          markupPercent={markupPercent}
+          taxPercent={project.tax_percent || 0}
+          finalBid={finalBid}
+          draftSubtotal={draftSubtotal}
+        />
+
+        {/* Trade Cards */}
+        <div className="space-y-3">
+          {Object.entries(itemsByCategory).map(([category, catItems]) => (
+            <TradeCard
+              key={category}
+              trade={category}
+              items={catItems}
+              total={categoryTotals[category] || 0}
+              onUpdateItem={handleMobileUpdateItem}
+              onDeleteItem={(id) => deleteItemMutation.mutate(id)}
+              onAddItem={(cat) => addItemMutation.mutate(cat)}
+              isExpanded={expandedCategories.has(category)}
+              onToggle={() => toggleCategory(category)}
+            />
+          ))}
+
+          {/* Empty state - Add first category */}
+          {Object.keys(itemsByCategory).length === 0 && (
+            <Card className="p-8 text-center">
+              <p className="text-muted-foreground mb-4">No items yet</p>
+              <p className="text-sm text-muted-foreground mb-4">
+                Tap the button below to describe what you need
+              </p>
+            </Card>
+          )}
+        </div>
+
+        {/* Magic Input FAB */}
+        <MagicInput 
+          onSubmit={handleAISubmit}
+          isProcessing={isAIProcessing}
+        />
+      </div>
+    );
+  }
+
+  // ========================================
+  // DESKTOP TABLE VIEW (Original)
+  // ========================================
   return (
     <div className="space-y-6">
       {/* Draft Management Bar */}
