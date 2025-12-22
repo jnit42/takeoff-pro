@@ -836,7 +836,7 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                           Apply
                         </Button>
                       )}
-                      {result.productUrl && (
+                      {result.productUrl && result.productUrl.startsWith('https://') && (
                         <Button
                           variant="outline"
                           size="sm"
