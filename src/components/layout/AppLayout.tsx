@@ -3,10 +3,10 @@ import { useLocation } from 'react-router-dom';
 import { AppSidebar } from './AppSidebar';
 import { MobileBottomNav } from './MobileBottomNav';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { Menu } from 'lucide-react';
+import { Menu, Send, Mic, Paperclip, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { MagicInput } from '@/components/takeoff/MagicInput';
+import { AIProcessingOverlay } from '@/components/takeoff/AIProcessingOverlay';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
@@ -29,7 +29,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const projectId = projectMatch ? projectMatch[1] : null;
 
   // AI Magic Input handler
-  const handleAISubmit = async (input: string, _type: 'voice' | 'text' | 'photo') => {
+  const handleAISubmit = async (input: string) => {
     if (!projectId) {
       toast({ title: 'No project selected', description: 'Open a project first', variant: 'destructive' });
       return;
@@ -56,7 +56,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         });
 
         toast({
-          title: 'Done!',
+          title: 'Estimate updated!',
           description: data.reasoning || `Added ${data.actions.length} items`,
         });
 
@@ -78,8 +78,11 @@ export function AppLayout({ children }: AppLayoutProps) {
   if (isMobile) {
     return (
       <div className="min-h-screen bg-background pb-20">
+        {/* AI Processing Overlay */}
+        <AIProcessingOverlay isVisible={isAIProcessing} />
+        
         {/* Mobile header with hamburger */}
-        <header className="sticky top-0 z-50 flex h-14 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4">
+        <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4">
           <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="shrink-0">
@@ -106,9 +109,9 @@ export function AppLayout({ children }: AppLayoutProps) {
           showMagicButton={!!projectId}
         />
         
-        {/* Global Magic Input - controlled open state */}
+        {/* Handoff-style Magic Input Sheet */}
         {projectId && (
-          <MagicInputSheet
+          <HandoffInputSheet
             open={magicInputOpen}
             onOpenChange={setMagicInputOpen}
             onSubmit={handleAISubmit}
@@ -131,8 +134,8 @@ export function AppLayout({ children }: AppLayoutProps) {
   );
 }
 
-// Separate controlled component for magic input
-function MagicInputSheet({ 
+// Handoff-style input sheet with location badge
+function HandoffInputSheet({ 
   open, 
   onOpenChange, 
   onSubmit, 
@@ -140,65 +143,93 @@ function MagicInputSheet({
 }: { 
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (input: string, type: 'voice' | 'text' | 'photo') => Promise<void>;
+  onSubmit: (input: string) => Promise<void>;
   isProcessing: boolean;
 }) {
   const [textInput, setTextInput] = useState('');
 
   const handleSubmit = async () => {
     if (!textInput.trim()) return;
-    await onSubmit(textInput, 'text');
+    await onSubmit(textInput);
     setTextInput('');
   };
 
   const quickPrompts = [
     "5x8 bathroom, mid-range",
-    "10x12 bedroom, standard",
-    "Frame a 10x10 room",
+    "Frame a 15x20 basement room",
+    "10x12 bedroom with closet",
     "Kitchen demo and remodel",
   ];
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="h-auto max-h-[80vh] rounded-t-2xl">
-        <div className="pt-2 pb-6 space-y-4">
-          <h3 className="text-center font-semibold text-lg">What do you need?</h3>
-
-          {/* Text Input */}
-          <div className="relative">
-            <input
-              value={textInput}
-              onChange={(e) => setTextInput(e.target.value)}
-              placeholder="e.g., '5x8 bathroom, mid-range finishes'"
-              className="w-full h-12 px-4 pr-12 text-base rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-              onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-              disabled={isProcessing}
-              autoFocus
-            />
-            <Button
-              size="icon"
-              className="absolute right-1 top-1 h-10 w-10"
-              onClick={handleSubmit}
-              disabled={!textInput.trim() || isProcessing}
-            >
-              {isProcessing ? (
-                <span className="h-5 w-5 animate-spin border-2 border-current border-t-transparent rounded-full" />
-              ) : (
-                <span className="text-lg">→</span>
-              )}
-            </Button>
+      <SheetContent side="bottom" className="rounded-t-3xl border-t border-primary/30 bg-background">
+        <div className="pt-3 pb-6 space-y-4">
+          {/* Handoff-style input bar */}
+          <div className="rounded-xl border-2 border-primary/50 bg-background p-2">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-sm text-muted-foreground">Use AI</span>
+            </div>
+            
+            <div className="relative">
+              <input
+                value={textInput}
+                onChange={(e) => setTextInput(e.target.value)}
+                placeholder="Describe what you need to estimate..."
+                className="w-full h-12 px-4 pr-24 text-base bg-muted/30 rounded-lg border-0 focus:outline-none focus:ring-0"
+                onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                disabled={isProcessing}
+                autoFocus
+              />
+              
+              {/* Action buttons */}
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 text-muted-foreground"
+                  disabled={isProcessing}
+                >
+                  <Paperclip className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 text-muted-foreground"
+                  disabled={isProcessing}
+                >
+                  <Mic className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={handleSubmit}
+                  disabled={!textInput.trim() || isProcessing}
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            
+            {/* Location badge */}
+            <div className="flex items-center gap-2 mt-2">
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
+                <MapPin className="h-3 w-3" />
+                Set Location
+              </Button>
+            </div>
           </div>
 
           {/* Quick Prompts */}
           <div className="space-y-2">
-            <p className="text-xs text-muted-foreground text-center">Quick prompts</p>
+            <p className="text-xs text-muted-foreground text-center">Try one of these:</p>
             <div className="flex flex-wrap gap-2 justify-center">
               {quickPrompts.map((prompt) => (
                 <Button
                   key={prompt}
                   variant="outline"
                   size="sm"
-                  className="text-xs"
+                  className="text-xs bg-muted/20"
                   onClick={() => setTextInput(prompt)}
                   disabled={isProcessing}
                 >
@@ -207,11 +238,6 @@ function MagicInputSheet({
               ))}
             </div>
           </div>
-
-          {/* Pro Tip */}
-          <p className="text-xs text-center text-muted-foreground pt-2">
-            💡 Just describe the room or project. We'll handle the math.
-          </p>
         </div>
       </SheetContent>
     </Sheet>
