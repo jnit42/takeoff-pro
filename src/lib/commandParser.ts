@@ -20,7 +20,10 @@ export type ActionType =
   | 'plans.open'
   | 'navigate.plans'
   | 'navigate.takeoff'
-  | 'navigate.labor';
+  | 'navigate.labor'
+  | 'learn.terminology'
+  | 'learn.preference'
+  | 'pricing.lookup';
 
 export interface ParsedAction {
   type: ActionType;

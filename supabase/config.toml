@@ -2,3 +2,6 @@ project_id = "pcdbqdisikedlivjgtrs"
 
 [functions.ai-command-parse]
 verify_jwt = false
+
+[functions.price-lookup]
+verify_jwt = false

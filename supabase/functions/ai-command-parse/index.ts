@@ -177,10 +177,16 @@ serve(async (req) => {
     let laborItems: any[] = [];
     let assumptions: any[] = [];
     let rfis: any[] = [];
+    let userKnowledge: any[] = [];
+    let pricingData: any[] = [];
     
-    if (projectContext?.projectId && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
-      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-      
+    // Initialize Supabase client once
+    let supabase: ReturnType<typeof createClient> | null = null;
+    if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+      supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    }
+    
+    if (projectContext?.projectId && supabase) {
       const { data: project } = await supabase
         .from('projects')
         .select('*')
@@ -221,12 +227,48 @@ serve(async (req) => {
       }
     }
 
+    // Load user's learned knowledge (corrections, terminology, preferences)
+    if (supabase) {
+      const { data: knowledge } = await supabase
+        .from('ai_knowledge')
+        .select('category, key, value, confidence')
+        .order('usage_count', { ascending: false })
+        .limit(50);
+      
+      if (knowledge) userKnowledge = knowledge;
+
+      // Load cached pricing data
+      const { data: prices } = await supabase
+        .from('price_cache')
+        .select('item_name, store, price, unit')
+        .gt('expires_at', new Date().toISOString())
+        .order('scraped_at', { ascending: false })
+        .limit(100);
+      
+      if (prices) pricingData = prices;
+    }
+
     const takeoffSummary = buildTakeoffSummary(takeoffItems);
     const laborSummary = buildLaborSummary(laborItems);
     const projectSummary = buildProjectSummary(projectData, takeoffItems, laborItems, assumptions, rfis);
+    
+    // Build knowledge and pricing context
+    const knowledgeContext = userKnowledge.length > 0 
+      ? `## USER'S LEARNED PREFERENCES
+${userKnowledge.map((k: any) => `- ${k.category}: "${k.key}" → ${JSON.stringify(k.value)}`).join('\n')}
+When the user has taught me terminology or preferences above, I should use them.`
+      : '';
+    
+    const pricingContext = pricingData.length > 0
+      ? `## LIVE PRICING DATA (cached)
+${pricingData.slice(0, 20).map((p: any) => `- ${p.item_name}: $${p.price}/${p.unit} (${p.store})`).join('\n')}
+I can use these prices to provide unit costs. If user asks for pricing on items not cached, I should suggest using "lookup prices" command.`
+      : '';
 
     console.log('[AI Parse] Input:', message);
     console.log('[AI Parse] Project:', projectData?.name);
+    console.log('[AI Parse] User knowledge items:', userKnowledge.length);
+    console.log('[AI Parse] Cached prices:', pricingData.length);
 
     if (!LOVABLE_API_KEY) {
       console.log('[AI Parse] No API key, using pattern fallback');
@@ -248,6 +290,10 @@ ${takeoffSummary || 'Empty - no items yet.'}
 
 ## EXISTING LABOR
 ${laborSummary || 'None yet.'}
+
+${knowledgeContext}
+
+${pricingContext}
 
 ## SCOPE RULES: What to include automatically
 When user mentions drywall finishing → include: sheets, joint compound, tape, screws, corner bead (for outside corners)
@@ -273,13 +319,30 @@ Do NOT add: electrical, plumbing, HVAC, doors, windows - unless explicitly reque
 - **PROFESSIONAL**: A veteran contractor should nod, not roll their eyes
 
 ## ACTIONS
-- takeoff.add_multiple: { items: [{ description, quantity, unit, category }] }
-- takeoff.add_item: { description, quantity, unit, category }
+- takeoff.add_multiple: { items: [{ description, quantity, unit, category, unit_cost? }] }
+- takeoff.add_item: { description, quantity, unit, category, unit_cost? }
 - project.set_defaults: { markup_percent?, tax_percent?, waste_percent? }
 - takeoff.promote_drafts: { scope: 'all' }
 - export.pdf: {}
 - qa.show_issues: {}
 - assumption.add: { statement, trade?, is_exclusion? } - Use when flagging something for verification
+- learn.terminology: { term, meaning, context? } - When user corrects terminology, learn it for next time
+- learn.preference: { preference, value } - When user expresses a preference (e.g., "always use 5/8 drywall for ceilings")
+- pricing.lookup: { items: string[] } - Request live pricing lookup for specific items
+
+## SELF-LEARNING
+When a user CORRECTS you (e.g., "no, that's called X not Y" or "I always use Z for basements"):
+1. Acknowledge the correction naturally
+2. Include a learn.terminology or learn.preference action to remember it
+3. Apply the correction to the current proposal
+
+Example correction response:
+User: "We call those PT sill plates, not bottom plates"
+Your action: { "type": "learn.terminology", "params": { "term": "PT sill plate", "meaning": "pressure-treated bottom plate on concrete", "context": "basement framing" } }
+
+## PRICING
+If you have pricing data available (in LIVE PRICING DATA above), include unit_cost in items.
+If user asks for pricing on items not in cache, add a pricing.lookup action.
 
 ## RESPONSE FORMAT (JSON only, no markdown)
 {

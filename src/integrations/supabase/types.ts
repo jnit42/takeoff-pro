@@ -64,6 +64,45 @@ export type Database = {
           },
         ]
       }
+      ai_knowledge: {
+        Row: {
+          category: string
+          confidence: number | null
+          created_at: string
+          id: string
+          key: string
+          source: string | null
+          updated_at: string
+          usage_count: number | null
+          user_id: string
+          value: Json
+        }
+        Insert: {
+          category?: string
+          confidence?: number | null
+          created_at?: string
+          id?: string
+          key: string
+          source?: string | null
+          updated_at?: string
+          usage_count?: number | null
+          user_id: string
+          value: Json
+        }
+        Update: {
+          category?: string
+          confidence?: number | null
+          created_at?: string
+          id?: string
+          key?: string
+          source?: string | null
+          updated_at?: string
+          usage_count?: number | null
+          user_id?: string
+          value?: Json
+        }
+        Relationships: []
+      }
       assemblies: {
         Row: {
           checklist_items: Json | null
@@ -490,6 +529,48 @@ export type Database = {
         }
         Relationships: []
       }
+      price_cache: {
+        Row: {
+          expires_at: string
+          id: string
+          in_stock: boolean | null
+          item_name: string
+          location: string | null
+          price: number | null
+          product_url: string | null
+          scraped_at: string
+          search_term: string
+          store: string
+          unit: string | null
+        }
+        Insert: {
+          expires_at?: string
+          id?: string
+          in_stock?: boolean | null
+          item_name: string
+          location?: string | null
+          price?: number | null
+          product_url?: string | null
+          scraped_at?: string
+          search_term: string
+          store: string
+          unit?: string | null
+        }
+        Update: {
+          expires_at?: string
+          id?: string
+          in_stock?: boolean | null
+          item_name?: string
+          location?: string | null
+          price?: number | null
+          product_url?: string | null
+          scraped_at?: string
+          search_term?: string
+          store?: string
+          unit?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           company_name: string | null
@@ -532,6 +613,7 @@ export type Database = {
           updated_at: string
           user_id: string
           waste_percent: number | null
+          zip_code: string | null
         }
         Insert: {
           address?: string | null
@@ -547,6 +629,7 @@ export type Database = {
           updated_at?: string
           user_id: string
           waste_percent?: number | null
+          zip_code?: string | null
         }
         Update: {
           address?: string | null
@@ -562,6 +645,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
           waste_percent?: number | null
+          zip_code?: string | null
         }
         Relationships: []
       }
