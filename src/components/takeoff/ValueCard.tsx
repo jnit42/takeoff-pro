@@ -1,14 +1,12 @@
 /**
  * Value Card Component
- * Shows the 3 key numbers at a glance: Total Cost, Markup, Profit
- * Handoff-style "bottom line first" approach
+ * Handoff-style: Just 3 numbers - Cost, Markup, Final Bid
+ * Clean, bold, no noise
  */
 
-import { DollarSign, TrendingUp, Percent } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { useClientMode } from '@/hooks/useClientMode';
 import { cn } from '@/lib/utils';
+import { formatCurrency } from '@/lib/constants';
+import { useClientMode } from '@/hooks/useClientMode';
 
 interface ValueCardProps {
   subtotal: number;
@@ -30,85 +28,55 @@ export function ValueCard({
   className
 }: ValueCardProps) {
   const { isClientMode } = useClientMode();
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
-  // Calculate profit (markup minus tax on materials)
   const tax = subtotal * (taxPercent / 100);
-  const profit = markup - tax;
-
+  const profit = markup;
+  
   return (
-    <Card className={cn('bg-gradient-to-br from-primary/10 to-accent/10 border-primary/20', className)}>
-      <CardContent className="p-4">
-        {/* Main Number - Final Bid */}
-        <div className="text-center mb-4">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
-            Final Bid
+    <div className={cn('rounded-xl bg-gradient-to-br from-primary/10 via-background to-accent/5 p-4 border border-primary/20', className)}>
+      {/* Main 3-number display */}
+      <div className="grid grid-cols-3 gap-3 text-center">
+        {/* Cost */}
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Cost</p>
+          <p className="text-xl font-bold font-mono tabular-nums mt-0.5">
+            {formatCurrency(subtotal)}
           </p>
-          <p className="text-4xl font-mono font-bold text-primary">
+        </div>
+        
+        {/* Markup/Tax - hidden in client mode */}
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+            {isClientMode ? 'Tax' : 'Markup'}
+          </p>
+          <p className="text-xl font-bold font-mono tabular-nums mt-0.5 text-muted-foreground">
+            {isClientMode ? formatCurrency(tax) : `+${markupPercent}%`}
+          </p>
+        </div>
+        
+        {/* Final Bid */}
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+            {isClientMode ? 'Total' : 'Bid'}
+          </p>
+          <p className="text-xl font-bold font-mono tabular-nums mt-0.5 text-primary">
             {formatCurrency(finalBid)}
           </p>
-          {draftSubtotal > 0 && (
-            <Badge variant="outline" className="mt-2 text-warning border-warning/50">
-              +{formatCurrency(draftSubtotal)} in drafts
-            </Badge>
-          )}
         </div>
-
-        {/* Three Metrics Row */}
-        <div className="grid grid-cols-3 gap-2 pt-3 border-t border-primary/20">
-          {/* Cost */}
-          <div className="text-center">
-            <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
-              <DollarSign className="h-3 w-3" />
-              <span className="text-[10px] uppercase">Cost</span>
-            </div>
-            <p className="font-mono font-semibold text-sm">
-              {formatCurrency(subtotal)}
-            </p>
-          </div>
-
-          {/* Markup / Hidden in Client Mode */}
-          <div className="text-center">
-            <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
-              <Percent className="h-3 w-3" />
-              <span className="text-[10px] uppercase">Markup</span>
-            </div>
-            {isClientMode ? (
-              <p className="text-sm text-muted-foreground">—</p>
-            ) : (
-              <p className="font-mono font-semibold text-sm">
-                {markupPercent}%
-              </p>
-            )}
-          </div>
-
-          {/* Profit / Hidden in Client Mode */}
-          <div className="text-center">
-            <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
-              <TrendingUp className="h-3 w-3" />
-              <span className="text-[10px] uppercase">Profit</span>
-            </div>
-            {isClientMode ? (
-              <p className="text-sm text-muted-foreground">—</p>
-            ) : (
-              <p className={cn(
-                'font-mono font-semibold text-sm',
-                profit > 0 ? 'text-green-600' : 'text-destructive'
-              )}>
-                {formatCurrency(profit)}
-              </p>
-            )}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+      </div>
+      
+      {/* Draft indicator - small, unobtrusive */}
+      {draftSubtotal > 0 && (
+        <p className="text-[10px] text-center text-warning mt-3 pt-2 border-t border-border/30">
+          +{formatCurrency(draftSubtotal)} in drafts
+        </p>
+      )}
+      
+      {/* Hidden profit indicator for contractor */}
+      {!isClientMode && profit > 0 && (
+        <p className="text-[10px] text-center text-muted-foreground mt-2">
+          Profit: {formatCurrency(profit)}
+        </p>
+      )}
+    </div>
   );
 }
