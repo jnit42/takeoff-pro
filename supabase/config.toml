@@ -11,3 +11,12 @@ verify_jwt = false
 
 [functions.contribute-global-knowledge]
 verify_jwt = false
+
+[functions.construction-brain]
+verify_jwt = false
+
+[functions.background-collector]
+verify_jwt = false
+
+[functions.data-validator]
+verify_jwt = false

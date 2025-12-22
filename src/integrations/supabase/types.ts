@@ -64,6 +64,136 @@ export type Database = {
           },
         ]
       }
+      ai_conversations: {
+        Row: {
+          archived_at: string | null
+          context_summary: string | null
+          corrections_received: number | null
+          decisions_made: number | null
+          id: string
+          last_message_at: string | null
+          learned_preferences: Json | null
+          message_count: number | null
+          messages: Json | null
+          project_id: string | null
+          started_at: string
+          status: string | null
+          title: string | null
+          user_id: string
+        }
+        Insert: {
+          archived_at?: string | null
+          context_summary?: string | null
+          corrections_received?: number | null
+          decisions_made?: number | null
+          id?: string
+          last_message_at?: string | null
+          learned_preferences?: Json | null
+          message_count?: number | null
+          messages?: Json | null
+          project_id?: string | null
+          started_at?: string
+          status?: string | null
+          title?: string | null
+          user_id?: string
+        }
+        Update: {
+          archived_at?: string | null
+          context_summary?: string | null
+          corrections_received?: number | null
+          decisions_made?: number | null
+          id?: string
+          last_message_at?: string | null
+          learned_preferences?: Json | null
+          message_count?: number | null
+          messages?: Json | null
+          project_id?: string | null
+          started_at?: string
+          status?: string | null
+          title?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_conversations_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_decisions: {
+        Row: {
+          accuracy_determined_at: string | null
+          confidence_factors: Json | null
+          confidence_score: number | null
+          conversation_id: string | null
+          data_sources_used: Json | null
+          decided_at: string
+          decision_type: string
+          id: string
+          input_context: Json | null
+          input_text: string
+          output_actions: Json | null
+          output_reasoning: string | null
+          project_id: string | null
+          responded_at: string | null
+          user_id: string
+          user_modification: Json | null
+          user_response: string | null
+          was_accurate: boolean | null
+        }
+        Insert: {
+          accuracy_determined_at?: string | null
+          confidence_factors?: Json | null
+          confidence_score?: number | null
+          conversation_id?: string | null
+          data_sources_used?: Json | null
+          decided_at?: string
+          decision_type: string
+          id?: string
+          input_context?: Json | null
+          input_text: string
+          output_actions?: Json | null
+          output_reasoning?: string | null
+          project_id?: string | null
+          responded_at?: string | null
+          user_id?: string
+          user_modification?: Json | null
+          user_response?: string | null
+          was_accurate?: boolean | null
+        }
+        Update: {
+          accuracy_determined_at?: string | null
+          confidence_factors?: Json | null
+          confidence_score?: number | null
+          conversation_id?: string | null
+          data_sources_used?: Json | null
+          decided_at?: string
+          decision_type?: string
+          id?: string
+          input_context?: Json | null
+          input_text?: string
+          output_actions?: Json | null
+          output_reasoning?: string | null
+          project_id?: string | null
+          responded_at?: string | null
+          user_id?: string
+          user_modification?: Json | null
+          user_response?: string | null
+          was_accurate?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_decisions_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_knowledge: {
         Row: {
           category: string
@@ -291,6 +421,144 @@ export type Database = {
           },
         ]
       }
+      construction_knowledge: {
+        Row: {
+          avg_value: number | null
+          category: string | null
+          confidence_score: number | null
+          created_at: string
+          data_freshness_days: number | null
+          description: string | null
+          display_name: string
+          id: string
+          is_system_seeded: boolean | null
+          is_user_contributed: boolean | null
+          key: string
+          knowledge_type: string
+          last_validated_at: string | null
+          max_value: number | null
+          min_value: number | null
+          primary_sources: Json | null
+          region: string | null
+          regional_multipliers: Json | null
+          sample_count: number | null
+          std_deviation: number | null
+          subcategory: string | null
+          trade: string | null
+          unit: string | null
+          updated_at: string
+          value: number | null
+        }
+        Insert: {
+          avg_value?: number | null
+          category?: string | null
+          confidence_score?: number | null
+          created_at?: string
+          data_freshness_days?: number | null
+          description?: string | null
+          display_name: string
+          id?: string
+          is_system_seeded?: boolean | null
+          is_user_contributed?: boolean | null
+          key: string
+          knowledge_type: string
+          last_validated_at?: string | null
+          max_value?: number | null
+          min_value?: number | null
+          primary_sources?: Json | null
+          region?: string | null
+          regional_multipliers?: Json | null
+          sample_count?: number | null
+          std_deviation?: number | null
+          subcategory?: string | null
+          trade?: string | null
+          unit?: string | null
+          updated_at?: string
+          value?: number | null
+        }
+        Update: {
+          avg_value?: number | null
+          category?: string | null
+          confidence_score?: number | null
+          created_at?: string
+          data_freshness_days?: number | null
+          description?: string | null
+          display_name?: string
+          id?: string
+          is_system_seeded?: boolean | null
+          is_user_contributed?: boolean | null
+          key?: string
+          knowledge_type?: string
+          last_validated_at?: string | null
+          max_value?: number | null
+          min_value?: number | null
+          primary_sources?: Json | null
+          region?: string | null
+          regional_multipliers?: Json | null
+          sample_count?: number | null
+          std_deviation?: number | null
+          subcategory?: string | null
+          trade?: string | null
+          unit?: string | null
+          updated_at?: string
+          value?: number | null
+        }
+        Relationships: []
+      }
+      data_sources: {
+        Row: {
+          created_at: string
+          credibility_factors: Json | null
+          credibility_score: number
+          failed_imports: number | null
+          id: string
+          last_scraped_at: string | null
+          name: string
+          scrape_config: Json | null
+          scrape_enabled: boolean | null
+          scrape_frequency: string | null
+          source_type: string
+          successful_imports: number | null
+          total_imports: number | null
+          updated_at: string
+          url: string | null
+        }
+        Insert: {
+          created_at?: string
+          credibility_factors?: Json | null
+          credibility_score?: number
+          failed_imports?: number | null
+          id?: string
+          last_scraped_at?: string | null
+          name: string
+          scrape_config?: Json | null
+          scrape_enabled?: boolean | null
+          scrape_frequency?: string | null
+          source_type: string
+          successful_imports?: number | null
+          total_imports?: number | null
+          updated_at?: string
+          url?: string | null
+        }
+        Update: {
+          created_at?: string
+          credibility_factors?: Json | null
+          credibility_score?: number
+          failed_imports?: number | null
+          id?: string
+          last_scraped_at?: string | null
+          name?: string
+          scrape_config?: Json | null
+          scrape_enabled?: boolean | null
+          scrape_frequency?: string | null
+          source_type?: string
+          successful_imports?: number | null
+          total_imports?: number | null
+          updated_at?: string
+          url?: string | null
+        }
+        Relationships: []
+      }
       global_knowledge: {
         Row: {
           avg_value: number | null
@@ -350,6 +618,77 @@ export type Database = {
           value?: Json
         }
         Relationships: []
+      }
+      knowledge_imports: {
+        Row: {
+          confidence_score: number | null
+          contradicting_sources: number | null
+          corroborating_sources: number | null
+          created_at: string
+          data_source_id: string | null
+          extracted_key: string | null
+          extracted_region: string | null
+          extracted_trade: string | null
+          extracted_unit: string | null
+          extracted_value: number | null
+          id: string
+          import_type: string
+          raw_data: Json
+          scraped_at: string
+          source_date: string | null
+          validated_at: string | null
+          validation_reason: string | null
+          validation_status: string | null
+        }
+        Insert: {
+          confidence_score?: number | null
+          contradicting_sources?: number | null
+          corroborating_sources?: number | null
+          created_at?: string
+          data_source_id?: string | null
+          extracted_key?: string | null
+          extracted_region?: string | null
+          extracted_trade?: string | null
+          extracted_unit?: string | null
+          extracted_value?: number | null
+          id?: string
+          import_type: string
+          raw_data: Json
+          scraped_at?: string
+          source_date?: string | null
+          validated_at?: string | null
+          validation_reason?: string | null
+          validation_status?: string | null
+        }
+        Update: {
+          confidence_score?: number | null
+          contradicting_sources?: number | null
+          corroborating_sources?: number | null
+          created_at?: string
+          data_source_id?: string | null
+          extracted_key?: string | null
+          extracted_region?: string | null
+          extracted_trade?: string | null
+          extracted_unit?: string | null
+          extracted_value?: number | null
+          id?: string
+          import_type?: string
+          raw_data?: Json
+          scraped_at?: string
+          source_date?: string | null
+          validated_at?: string | null
+          validation_reason?: string | null
+          validation_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_imports_data_source_id_fkey"
+            columns: ["data_source_id"]
+            isOneToOne: false
+            referencedRelation: "data_sources"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       labor_estimates: {
         Row: {
@@ -1004,6 +1343,144 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      subcontractor_quotes: {
+        Row: {
+          actual_amount: number | null
+          completed_date: string | null
+          created_at: string
+          id: string
+          market_rate_estimate: number | null
+          notes: string | null
+          project_id: string | null
+          quote_date: string
+          quoted_amount: number
+          scope_description: string
+          status: string | null
+          subcontractor_id: string
+          trade: string
+          variance_vs_actual: number | null
+          variance_vs_market: number | null
+        }
+        Insert: {
+          actual_amount?: number | null
+          completed_date?: string | null
+          created_at?: string
+          id?: string
+          market_rate_estimate?: number | null
+          notes?: string | null
+          project_id?: string | null
+          quote_date?: string
+          quoted_amount: number
+          scope_description: string
+          status?: string | null
+          subcontractor_id: string
+          trade: string
+          variance_vs_actual?: number | null
+          variance_vs_market?: number | null
+        }
+        Update: {
+          actual_amount?: number | null
+          completed_date?: string | null
+          created_at?: string
+          id?: string
+          market_rate_estimate?: number | null
+          notes?: string | null
+          project_id?: string | null
+          quote_date?: string
+          quoted_amount?: number
+          scope_description?: string
+          status?: string | null
+          subcontractor_id?: string
+          trade?: string
+          variance_vs_actual?: number | null
+          variance_vs_market?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subcontractor_quotes_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subcontractor_quotes_subcontractor_id_fkey"
+            columns: ["subcontractor_id"]
+            isOneToOne: false
+            referencedRelation: "subcontractors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subcontractors: {
+        Row: {
+          avg_quote_accuracy: number | null
+          avg_vs_market: number | null
+          company_name: string | null
+          created_at: string
+          email: string | null
+          id: string
+          last_quote_date: string | null
+          name: string
+          notes: string | null
+          phone: string | null
+          price_trend: string | null
+          region: string | null
+          reliability_score: number | null
+          service_area: string[] | null
+          tags: string[] | null
+          total_projects: number | null
+          trade: string
+          typical_markup: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avg_quote_accuracy?: number | null
+          avg_vs_market?: number | null
+          company_name?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          last_quote_date?: string | null
+          name: string
+          notes?: string | null
+          phone?: string | null
+          price_trend?: string | null
+          region?: string | null
+          reliability_score?: number | null
+          service_area?: string[] | null
+          tags?: string[] | null
+          total_projects?: number | null
+          trade: string
+          typical_markup?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          avg_quote_accuracy?: number | null
+          avg_vs_market?: number | null
+          company_name?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          last_quote_date?: string | null
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          price_trend?: string | null
+          region?: string | null
+          reliability_score?: number | null
+          service_area?: string[] | null
+          tags?: string[] | null
+          total_projects?: number | null
+          trade?: string
+          typical_markup?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       takeoff_items: {
         Row: {
