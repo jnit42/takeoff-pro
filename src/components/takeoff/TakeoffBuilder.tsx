@@ -913,21 +913,18 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            {showDrafts && draftCount > 0 && (
-                              <TableHead className="w-[40px]"></TableHead>
-                            )}
-                            <TableHead className="w-[200px]">Description</TableHead>
-                            <TableHead className="w-[100px]">Spec</TableHead>
-                            <TableHead className="w-[80px]">Unit</TableHead>
-                            <TableHead className="w-[80px] text-right">Qty</TableHead>
-                            <TableHead className="w-[70px] text-right">Waste%</TableHead>
-                            <TableHead className="w-[80px] text-right">Adj Qty</TableHead>
-                            <TableHead className="w-[70px] text-right">Pkg Size</TableHead>
-                            <TableHead className="w-[70px] text-right">Pkgs</TableHead>
-                            <TableHead className="w-[120px] text-right">Unit $</TableHead>
-                            <TableHead className="w-[100px] text-right">Extended</TableHead>
-                            <TableHead className="w-[120px]">Vendor</TableHead>
-                            <TableHead className="w-[50px]"></TableHead>
+                            <TableHead className="min-w-[180px]">Description</TableHead>
+                            <TableHead className="w-[80px]">Spec</TableHead>
+                            <TableHead className="w-[70px]">Unit</TableHead>
+                            <TableHead className="w-[70px] text-right">Qty</TableHead>
+                            <TableHead className="w-[60px] text-right">Waste%</TableHead>
+                            <TableHead className="w-[70px] text-right">Adj Qty</TableHead>
+                            <TableHead className="w-[60px] text-right">Pkg Size</TableHead>
+                            <TableHead className="w-[50px] text-right">Pkgs</TableHead>
+                            <TableHead className="w-[110px] text-right">Unit $</TableHead>
+                            <TableHead className="w-[90px] text-right">Extended</TableHead>
+                            <TableHead className="w-[100px]">Vendor</TableHead>
+                            <TableHead className="w-[40px]"></TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -936,23 +933,20 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                             const StatusIcon = priceIndicator.icon;
                             const isLoadingThis = loadingPriceFor === item.id;
                             
-                            return (
+                              return (
                               <TableRow 
                                 key={item.id}
                                 className={item.draft ? 'bg-warning/5' : ''}
                               >
-                                {showDrafts && draftCount > 0 && (
-                                  <TableCell>
-                                    {item.draft && (
+                                <TableCell className="min-w-[180px]">
+                                  <div className="flex items-center gap-2">
+                                    {item.draft && showDrafts && (
                                       <Checkbox
                                         checked={selectedItems.has(item.id)}
                                         onCheckedChange={() => toggleSelectItem(item.id)}
+                                        className="shrink-0"
                                       />
                                     )}
-                                  </TableCell>
-                                )}
-                                <TableCell className="min-w-[200px]">
-                                  <div className="flex items-center gap-2">
                                     {item.draft && (
                                       <Badge variant="outline" className="bg-warning/20 text-warning border-warning/50 text-xs shrink-0">
                                         Draft
@@ -963,7 +957,7 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                                       onChange={(e) =>
                                         handleInputChange(item.id, 'description', e.target.value)
                                       }
-                                      className="h-8 min-w-[150px] flex-1"
+                                      className="h-8 min-w-[120px] flex-1"
                                       placeholder="Enter description..."
                                     />
                                   </div>
