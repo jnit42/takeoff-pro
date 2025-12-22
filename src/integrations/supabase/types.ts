@@ -970,6 +970,170 @@ export type Database = {
         }
         Relationships: []
       }
+      price_suggestions: {
+        Row: {
+          accepted_at: string | null
+          accepted_to_price_book_id: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          in_stock: boolean | null
+          match_confidence: number | null
+          match_type: string
+          price: number | null
+          product_catalog_id: string | null
+          product_name: string | null
+          product_url: string | null
+          project_id: string | null
+          raw_response: Json | null
+          rejected_reason: string | null
+          scraped_at: string
+          search_term: string
+          sku: string | null
+          source: string
+          status: string | null
+          store_id: string | null
+          takeoff_item_id: string | null
+          unit: string | null
+          user_id: string
+          zip_code: string | null
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_to_price_book_id?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          in_stock?: boolean | null
+          match_confidence?: number | null
+          match_type?: string
+          price?: number | null
+          product_catalog_id?: string | null
+          product_name?: string | null
+          product_url?: string | null
+          project_id?: string | null
+          raw_response?: Json | null
+          rejected_reason?: string | null
+          scraped_at?: string
+          search_term: string
+          sku?: string | null
+          source: string
+          status?: string | null
+          store_id?: string | null
+          takeoff_item_id?: string | null
+          unit?: string | null
+          user_id?: string
+          zip_code?: string | null
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_to_price_book_id?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          in_stock?: boolean | null
+          match_confidence?: number | null
+          match_type?: string
+          price?: number | null
+          product_catalog_id?: string | null
+          product_name?: string | null
+          product_url?: string | null
+          project_id?: string | null
+          raw_response?: Json | null
+          rejected_reason?: string | null
+          scraped_at?: string
+          search_term?: string
+          sku?: string | null
+          source?: string
+          status?: string | null
+          store_id?: string | null
+          takeoff_item_id?: string | null
+          unit?: string | null
+          user_id?: string
+          zip_code?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "price_suggestions_accepted_to_price_book_id_fkey"
+            columns: ["accepted_to_price_book_id"]
+            isOneToOne: false
+            referencedRelation: "price_book"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "price_suggestions_product_catalog_id_fkey"
+            columns: ["product_catalog_id"]
+            isOneToOne: false
+            referencedRelation: "product_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "price_suggestions_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "price_suggestions_takeoff_item_id_fkey"
+            columns: ["takeoff_item_id"]
+            isOneToOne: false
+            referencedRelation: "takeoff_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_catalog: {
+        Row: {
+          canonical_key: string
+          category: string
+          common_aliases: string[] | null
+          created_at: string
+          created_by: string | null
+          default_unit: string
+          display_name: string
+          id: string
+          is_system: boolean | null
+          search_keywords: string[] | null
+          specifications: Json | null
+          trade: string | null
+          updated_at: string
+          usage_count: number | null
+        }
+        Insert: {
+          canonical_key: string
+          category: string
+          common_aliases?: string[] | null
+          created_at?: string
+          created_by?: string | null
+          default_unit?: string
+          display_name: string
+          id?: string
+          is_system?: boolean | null
+          search_keywords?: string[] | null
+          specifications?: Json | null
+          trade?: string | null
+          updated_at?: string
+          usage_count?: number | null
+        }
+        Update: {
+          canonical_key?: string
+          category?: string
+          common_aliases?: string[] | null
+          created_at?: string
+          created_by?: string | null
+          default_unit?: string
+          display_name?: string
+          id?: string
+          is_system?: boolean | null
+          search_keywords?: string[] | null
+          specifications?: Json | null
+          trade?: string | null
+          updated_at?: string
+          usage_count?: number | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           company_name: string | null
@@ -1344,6 +1508,56 @@ export type Database = {
           },
         ]
       }
+      store_sku_mappings: {
+        Row: {
+          created_at: string
+          id: string
+          last_price: number | null
+          last_price_at: string | null
+          match_confidence: number | null
+          product_catalog_id: string
+          product_url: string | null
+          sku: string | null
+          store: string
+          store_product_name: string
+          verified_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_price?: number | null
+          last_price_at?: string | null
+          match_confidence?: number | null
+          product_catalog_id: string
+          product_url?: string | null
+          sku?: string | null
+          store: string
+          store_product_name: string
+          verified_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_price?: number | null
+          last_price_at?: string | null
+          match_confidence?: number | null
+          product_catalog_id?: string
+          product_url?: string | null
+          sku?: string | null
+          store?: string
+          store_product_name?: string
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_sku_mappings_product_catalog_id_fkey"
+            columns: ["product_catalog_id"]
+            isOneToOne: false
+            referencedRelation: "product_catalog"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subcontractor_quotes: {
         Row: {
           actual_amount: number | null
@@ -1628,6 +1842,33 @@ export type Database = {
           is_system?: boolean | null
           name?: string
           type?: string
+        }
+        Relationships: []
+      }
+      user_lookup_limits: {
+        Row: {
+          created_at: string
+          id: string
+          last_lookup_at: string | null
+          lookup_count: number
+          lookup_date: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_lookup_at?: string | null
+          lookup_count?: number
+          lookup_date?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_lookup_at?: string | null
+          lookup_count?: number
+          lookup_date?: string
+          user_id?: string
         }
         Relationships: []
       }
