@@ -291,6 +291,66 @@ export type Database = {
           },
         ]
       }
+      global_knowledge: {
+        Row: {
+          avg_value: number | null
+          category: string | null
+          confidence: number | null
+          created_at: string
+          id: string
+          key: string
+          knowledge_type: string
+          last_updated_by_project: string | null
+          max_value: number | null
+          min_value: number | null
+          project_type: string | null
+          region: string | null
+          sample_count: number
+          std_dev: number | null
+          trade: string | null
+          updated_at: string
+          value: Json
+        }
+        Insert: {
+          avg_value?: number | null
+          category?: string | null
+          confidence?: number | null
+          created_at?: string
+          id?: string
+          key: string
+          knowledge_type: string
+          last_updated_by_project?: string | null
+          max_value?: number | null
+          min_value?: number | null
+          project_type?: string | null
+          region?: string | null
+          sample_count?: number
+          std_dev?: number | null
+          trade?: string | null
+          updated_at?: string
+          value: Json
+        }
+        Update: {
+          avg_value?: number | null
+          category?: string | null
+          confidence?: number | null
+          created_at?: string
+          id?: string
+          key?: string
+          knowledge_type?: string
+          last_updated_by_project?: string | null
+          max_value?: number | null
+          min_value?: number | null
+          project_type?: string | null
+          region?: string | null
+          sample_count?: number
+          std_dev?: number | null
+          trade?: string | null
+          updated_at?: string
+          value?: Json
+        }
+        Relationships: []
+      }
       labor_estimates: {
         Row: {
           assumptions: Json | null
@@ -598,6 +658,171 @@ export type Database = {
         }
         Relationships: []
       }
+      project_actuals: {
+        Row: {
+          actual_amount: number | null
+          actual_qty: number | null
+          actual_unit: string | null
+          category: string
+          created_at: string
+          description: string | null
+          estimated_amount: number
+          estimated_qty: number
+          estimated_unit: string
+          id: string
+          labor_line_item_id: string | null
+          notes: string | null
+          paid_date: string | null
+          paid_to: string | null
+          project_id: string
+          takeoff_item_id: string | null
+          updated_at: string
+          variance_amount: number | null
+          variance_percent: number | null
+          vendor: string | null
+        }
+        Insert: {
+          actual_amount?: number | null
+          actual_qty?: number | null
+          actual_unit?: string | null
+          category?: string
+          created_at?: string
+          description?: string | null
+          estimated_amount?: number
+          estimated_qty?: number
+          estimated_unit?: string
+          id?: string
+          labor_line_item_id?: string | null
+          notes?: string | null
+          paid_date?: string | null
+          paid_to?: string | null
+          project_id: string
+          takeoff_item_id?: string | null
+          updated_at?: string
+          variance_amount?: number | null
+          variance_percent?: number | null
+          vendor?: string | null
+        }
+        Update: {
+          actual_amount?: number | null
+          actual_qty?: number | null
+          actual_unit?: string | null
+          category?: string
+          created_at?: string
+          description?: string | null
+          estimated_amount?: number
+          estimated_qty?: number
+          estimated_unit?: string
+          id?: string
+          labor_line_item_id?: string | null
+          notes?: string | null
+          paid_date?: string | null
+          paid_to?: string | null
+          project_id?: string
+          takeoff_item_id?: string | null
+          updated_at?: string
+          variance_amount?: number | null
+          variance_percent?: number | null
+          vendor?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_actuals_labor_line_item_id_fkey"
+            columns: ["labor_line_item_id"]
+            isOneToOne: false
+            referencedRelation: "labor_line_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_actuals_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_actuals_takeoff_item_id_fkey"
+            columns: ["takeoff_item_id"]
+            isOneToOne: false
+            referencedRelation: "takeoff_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_reviews: {
+        Row: {
+          completed_at: string | null
+          contribute_to_global: boolean | null
+          created_at: string
+          id: string
+          labor_variances: Json | null
+          learned_productivities: Json | null
+          learned_rates: Json | null
+          on_budget: boolean | null
+          on_time: boolean | null
+          overall_accuracy_rating: number | null
+          pricing_variances: Json | null
+          project_id: string
+          recommendations: string | null
+          scope_changes: Json | null
+          status: string | null
+          updated_at: string
+          user_id: string
+          what_didnt_work: string | null
+          what_worked: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          contribute_to_global?: boolean | null
+          created_at?: string
+          id?: string
+          labor_variances?: Json | null
+          learned_productivities?: Json | null
+          learned_rates?: Json | null
+          on_budget?: boolean | null
+          on_time?: boolean | null
+          overall_accuracy_rating?: number | null
+          pricing_variances?: Json | null
+          project_id: string
+          recommendations?: string | null
+          scope_changes?: Json | null
+          status?: string | null
+          updated_at?: string
+          user_id?: string
+          what_didnt_work?: string | null
+          what_worked?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          contribute_to_global?: boolean | null
+          created_at?: string
+          id?: string
+          labor_variances?: Json | null
+          learned_productivities?: Json | null
+          learned_rates?: Json | null
+          on_budget?: boolean | null
+          on_time?: boolean | null
+          overall_accuracy_rating?: number | null
+          pricing_variances?: Json | null
+          project_id?: string
+          recommendations?: string | null
+          scope_changes?: Json | null
+          status?: string | null
+          updated_at?: string
+          user_id?: string
+          what_didnt_work?: string | null
+          what_worked?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_reviews_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       projects: {
         Row: {
           address: string | null
@@ -648,6 +873,93 @@ export type Database = {
           zip_code?: string | null
         }
         Relationships: []
+      }
+      receipts: {
+        Row: {
+          created_at: string
+          file_path: string
+          file_type: string | null
+          filename: string
+          id: string
+          line_items: Json | null
+          linked_actual_id: string | null
+          notes: string | null
+          ocr_confidence: number | null
+          ocr_raw_text: string | null
+          ocr_status: string | null
+          project_id: string
+          receipt_date: string | null
+          receipt_number: string | null
+          subtotal: number | null
+          tags: string[] | null
+          tax_amount: number | null
+          total_amount: number | null
+          updated_at: string
+          user_id: string
+          vendor_name: string | null
+        }
+        Insert: {
+          created_at?: string
+          file_path: string
+          file_type?: string | null
+          filename: string
+          id?: string
+          line_items?: Json | null
+          linked_actual_id?: string | null
+          notes?: string | null
+          ocr_confidence?: number | null
+          ocr_raw_text?: string | null
+          ocr_status?: string | null
+          project_id: string
+          receipt_date?: string | null
+          receipt_number?: string | null
+          subtotal?: number | null
+          tags?: string[] | null
+          tax_amount?: number | null
+          total_amount?: number | null
+          updated_at?: string
+          user_id?: string
+          vendor_name?: string | null
+        }
+        Update: {
+          created_at?: string
+          file_path?: string
+          file_type?: string | null
+          filename?: string
+          id?: string
+          line_items?: Json | null
+          linked_actual_id?: string | null
+          notes?: string | null
+          ocr_confidence?: number | null
+          ocr_raw_text?: string | null
+          ocr_status?: string | null
+          project_id?: string
+          receipt_date?: string | null
+          receipt_number?: string | null
+          subtotal?: number | null
+          tags?: string[] | null
+          tax_amount?: number | null
+          total_amount?: number | null
+          updated_at?: string
+          user_id?: string
+          vendor_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "receipts_linked_actual_id_fkey"
+            columns: ["linked_actual_id"]
+            isOneToOne: false
+            referencedRelation: "project_actuals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipts_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       rfis: {
         Row: {
