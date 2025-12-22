@@ -20,8 +20,7 @@ import {
   History,
   HelpCircle,
   AlertTriangle,
-  ChevronDown,
-  ChevronUp,
+  List,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -39,10 +38,13 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerFooter,
+  DrawerClose,
+} from '@/components/ui/drawer';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useVoiceInput, type VoiceStatus } from '@/hooks/useVoiceInput';
@@ -118,7 +120,7 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
   const [isExecuting, setIsExecuting] = useState(false);
   const [source, setSource] = useState<'text' | 'voice'>('text');
   const [showMoneyConfirm, setShowMoneyConfirm] = useState(false);
-  const [pendingExpanded, setPendingExpanded] = useState(true);
+  const [itemsDrawerOpen, setItemsDrawerOpen] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -641,69 +643,45 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
 
               {/* Bottom section - fixed at bottom */}
               <div className="flex-shrink-0 border-t bg-background">
-                {/* Pending actions panel - collapsible */}
+                {/* Pending items indicator - opens drawer */}
                 {pendingActions && (
-                  <Collapsible open={pendingExpanded} onOpenChange={setPendingExpanded}>
-                    <div className="border-b border-amber-200 dark:border-amber-800 bg-gradient-to-b from-amber-50 to-amber-100/50 dark:from-amber-950/40 dark:to-amber-900/20">
-                      {/* Header with count and actions - always visible */}
-                      <CollapsibleTrigger asChild>
-                        <button className="w-full flex items-center justify-between gap-2 px-3 py-2.5 hover:bg-amber-100/50 dark:hover:bg-amber-900/30 transition-colors">
-                          <div className="flex items-center gap-2">
-                            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-white text-xs font-bold">
-                              {getPendingItemCount(pendingActions)}
-                            </div>
-                            <span className="text-sm text-amber-800 dark:text-amber-200 font-medium">
-                              Items Ready
-                            </span>
-                            {pendingExpanded ? (
-                              <ChevronUp className="h-4 w-4 text-amber-600" />
-                            ) : (
-                              <ChevronDown className="h-4 w-4 text-amber-600" />
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
-                            <Button
-                              variant="default"
-                              size="sm"
-                              onClick={() => handleConfirmActions()}
-                              disabled={isExecuting}
-                              className="h-8 px-3 text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
-                            >
-                              {isExecuting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 sm:mr-1" />}
-                              <span className="hidden sm:inline">Confirm</span>
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={handleCancelActions}
-                              disabled={isExecuting}
-                              className="h-8 w-8 p-0 text-amber-600 dark:text-amber-400 hover:text-amber-800 hover:bg-amber-200/50 rounded-full"
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </button>
-                      </CollapsibleTrigger>
-                      
-                      {/* Material list - scrollable and editable */}
-                      <CollapsibleContent>
-                        {pendingMaterialItems.length > 0 && (
-                          <div className="max-h-40 overflow-y-auto p-2.5 border-t border-amber-200/50 dark:border-amber-800/50">
-                            <MaterialList 
-                              items={pendingMaterialItems}
-                              onUpdate={handleUpdatePendingItem}
-                              onRemove={handleRemovePendingItem}
-                              editable={true}
-                            />
-                          </div>
-                        )}
-                        {/* Footer hint */}
-                        <div className="px-3 py-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50/50 dark:bg-amber-950/30 border-t border-amber-200/50 dark:border-amber-800/50">
-                          💬 Type to add more items, tap to edit qty
-                        </div>
-                      </CollapsibleContent>
+                  <button
+                    onClick={() => setItemsDrawerOpen(true)}
+                    className="w-full flex items-center justify-between gap-2 px-3 py-2.5 bg-gradient-to-r from-amber-50 to-amber-100/50 dark:from-amber-950/40 dark:to-amber-900/20 border-b border-amber-200 dark:border-amber-800 hover:bg-amber-100/70 dark:hover:bg-amber-900/40 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-white text-xs font-bold">
+                        {getPendingItemCount(pendingActions)}
+                      </div>
+                      <span className="text-sm text-amber-800 dark:text-amber-200 font-medium">
+                        Items Ready
+                      </span>
+                      <span className="text-xs text-amber-600 dark:text-amber-400">
+                        Tap to review
+                      </span>
                     </div>
-                  </Collapsible>
+                    <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => handleConfirmActions()}
+                        disabled={isExecuting}
+                        className="h-8 px-3 text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
+                      >
+                        {isExecuting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 sm:mr-1" />}
+                        <span className="hidden sm:inline">Confirm</span>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleCancelActions}
+                        disabled={isExecuting}
+                        className="h-8 w-8 p-0 text-amber-600 dark:text-amber-400 hover:text-amber-800 hover:bg-amber-200/50 rounded-full"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </button>
                 )}
 
                 {/* Quick Commands */}
@@ -818,6 +796,74 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Items Review Drawer - Mobile-optimized fullscreen overlay */}
+      <Drawer open={itemsDrawerOpen} onOpenChange={setItemsDrawerOpen}>
+        <DrawerContent className="max-h-[85vh]">
+          <DrawerHeader className="border-b bg-gradient-to-r from-amber-50 to-amber-100/50 dark:from-amber-950/40 dark:to-amber-900/20">
+            <DrawerTitle className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-500 text-white text-sm font-bold">
+                {pendingActions ? getPendingItemCount(pendingActions) : 0}
+              </div>
+              <span className="text-amber-800 dark:text-amber-200">Items Ready for Review</span>
+            </DrawerTitle>
+          </DrawerHeader>
+          
+          {/* Scrollable item list */}
+          <div className="flex-1 overflow-y-auto p-4 max-h-[50vh]">
+            {pendingMaterialItems.length > 0 ? (
+              <MaterialList 
+                items={pendingMaterialItems}
+                onUpdate={handleUpdatePendingItem}
+                onRemove={handleRemovePendingItem}
+                editable={true}
+              />
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <List className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p>No items to review</p>
+              </div>
+            )}
+          </div>
+
+          {/* Hint */}
+          <div className="px-4 py-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50/50 dark:bg-amber-950/30 border-t border-amber-200/50 dark:border-amber-800/50">
+            💬 Close drawer to continue chatting. Tap items to edit quantity.
+          </div>
+
+          <DrawerFooter className="border-t pt-4 gap-2">
+            <Button
+              onClick={() => {
+                handleConfirmActions();
+                setItemsDrawerOpen(false);
+              }}
+              disabled={isExecuting}
+              className="w-full bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              {isExecuting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Check className="h-4 w-4 mr-2" />}
+              Confirm All Items
+            </Button>
+            <div className="flex gap-2">
+              <DrawerClose asChild>
+                <Button variant="outline" className="flex-1">
+                  Continue Chatting
+                </Button>
+              </DrawerClose>
+              <Button 
+                variant="ghost" 
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={() => {
+                  handleCancelActions();
+                  setItemsDrawerOpen(false);
+                }}
+              >
+                <X className="h-4 w-4 mr-1" />
+                Clear
+              </Button>
+            </div>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
     </Card>
   );
 }
