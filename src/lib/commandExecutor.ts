@@ -70,6 +70,15 @@ export async function executeAction(
       case 'takeoff.add_multiple':
         return await executeTakeoffAddMultiple(action.params, context);
 
+      case 'takeoff.delete_item':
+        return await executeTakeoffDeleteItem(action.params, context);
+
+      case 'takeoff.delete_items':
+        return await executeTakeoffDeleteItems(action.params, context);
+
+      case 'takeoff.update_item':
+        return await executeTakeoffUpdateItem(action.params, context);
+
       case 'takeoff.generate_drafts_from_assemblies':
         return await executeTakeoffGenerateDrafts(action.params, context);
 
@@ -304,17 +313,26 @@ async function executeTakeoffAddItem(
     throw new Error('No project selected. Please open a project first.');
   }
 
+  // Handle AI param variations: item_name, name, or description
+  const description = (params.description || params.item_name || params.name) as string;
+  if (!description) {
+    throw new Error('Item description is required');
+  }
+
+  const quantity = (params.quantity as number) || 0;
+  const unitCost = (params.unit_cost || params.cost || params.price) as number || 0;
+
   const { data: item, error } = await supabase
     .from('takeoff_items')
     .insert({
       project_id: context.projectId,
       category: (params.category as string) || 'General',
-      description: params.description as string,
+      description,
       unit: (params.unit as string) || 'EA',
-      quantity: params.quantity as number,
-      unit_cost: (params.unit_cost as number) || 0,
-      extended_cost: ((params.quantity as number) || 0) * ((params.unit_cost as number) || 0),
-      draft: (params.draft as boolean) || false,
+      quantity,
+      unit_cost: unitCost,
+      extended_cost: quantity * unitCost,
+      draft: (params.draft as boolean) ?? true, // Default to draft for AI-generated
       notes: params.notes as string,
     })
     .select()
@@ -325,7 +343,7 @@ async function executeTakeoffAddItem(
   return {
     success: true,
     actionType: 'takeoff.add_item',
-    message: `Added "${item.description}" (${item.quantity} ${item.unit})`,
+    message: `Added "${item.description}" (${item.quantity} ${item.unit}${unitCost ? ` @ $${unitCost}` : ''})`,
     data: { itemId: item.id },
     undoable: true,
     undoData: { itemId: item.id },
@@ -386,6 +404,220 @@ async function executeTakeoffAddMultiple(
     data: { itemIds: createdIds, count: createdIds.length },
     undoable: true,
     undoData: { itemIds: createdIds },
+  };
+}
+
+/**
+ * Delete a single takeoff item by ID or description match
+ */
+async function executeTakeoffDeleteItem(
+  params: Record<string, unknown>,
+  context: ExecutionContext
+): Promise<ExecutionResult> {
+  if (!context.projectId) {
+    throw new Error('No project selected. Please open a project first.');
+  }
+
+  const itemId = params.item_id as string | undefined;
+  const description = (params.description || params.item_name || params.name) as string | undefined;
+
+  let targetId = itemId;
+  let targetDescription = description;
+
+  // If no ID provided, try to find by description
+  if (!targetId && description) {
+    const { data: items } = await supabase
+      .from('takeoff_items')
+      .select('id, description')
+      .eq('project_id', context.projectId)
+      .ilike('description', `%${description}%`)
+      .limit(1);
+
+    if (items && items.length > 0) {
+      targetId = items[0].id;
+      targetDescription = items[0].description;
+    } else {
+      return {
+        success: false,
+        actionType: 'takeoff.delete_item',
+        message: `No item found matching "${description}"`,
+        undoable: false,
+      };
+    }
+  }
+
+  if (!targetId) {
+    return {
+      success: false,
+      actionType: 'takeoff.delete_item',
+      message: 'No item ID or description provided',
+      undoable: false,
+    };
+  }
+
+  // Get the item for undo data
+  const { data: item } = await supabase
+    .from('takeoff_items')
+    .select('*')
+    .eq('id', targetId)
+    .single();
+
+  if (!item) {
+    return {
+      success: false,
+      actionType: 'takeoff.delete_item',
+      message: 'Item not found',
+      undoable: false,
+    };
+  }
+
+  const { error } = await supabase
+    .from('takeoff_items')
+    .delete()
+    .eq('id', targetId);
+
+  if (error) throw error;
+
+  return {
+    success: true,
+    actionType: 'takeoff.delete_item',
+    message: `Deleted "${targetDescription || item.description}"`,
+    undoable: true,
+    undoData: { item },
+  };
+}
+
+/**
+ * Delete multiple takeoff items by IDs or scope
+ */
+async function executeTakeoffDeleteItems(
+  params: Record<string, unknown>,
+  context: ExecutionContext
+): Promise<ExecutionResult> {
+  if (!context.projectId) {
+    throw new Error('No project selected. Please open a project first.');
+  }
+
+  const itemIds = params.item_ids as string[] | undefined;
+  const scope = params.scope as string | undefined; // 'last', 'drafts', 'all'
+  const count = (params.count as number) || 1;
+
+  let query = supabase
+    .from('takeoff_items')
+    .select('id, description')
+    .eq('project_id', context.projectId);
+
+  if (itemIds && itemIds.length > 0) {
+    query = query.in('id', itemIds);
+  } else if (scope === 'drafts') {
+    query = query.eq('draft', true);
+  } else if (scope === 'last') {
+    query = query.order('created_at', { ascending: false }).limit(count);
+  }
+
+  const { data: items, error: fetchError } = await query;
+  if (fetchError) throw fetchError;
+
+  if (!items || items.length === 0) {
+    return {
+      success: false,
+      actionType: 'takeoff.delete_items',
+      message: 'No items found to delete',
+      undoable: false,
+    };
+  }
+
+  const idsToDelete = items.map(i => i.id);
+  const { error } = await supabase
+    .from('takeoff_items')
+    .delete()
+    .in('id', idsToDelete);
+
+  if (error) throw error;
+
+  return {
+    success: true,
+    actionType: 'takeoff.delete_items',
+    message: `Deleted ${idsToDelete.length} item(s)`,
+    undoable: false, // Could implement undo with saved items
+  };
+}
+
+/**
+ * Update an existing takeoff item
+ */
+async function executeTakeoffUpdateItem(
+  params: Record<string, unknown>,
+  context: ExecutionContext
+): Promise<ExecutionResult> {
+  if (!context.projectId) {
+    throw new Error('No project selected. Please open a project first.');
+  }
+
+  const itemId = params.item_id as string | undefined;
+  const description = params.description as string | undefined;
+
+  let targetId = itemId;
+
+  // If no ID, try to find by description
+  if (!targetId && description) {
+    const { data: items } = await supabase
+      .from('takeoff_items')
+      .select('id')
+      .eq('project_id', context.projectId)
+      .ilike('description', `%${description}%`)
+      .limit(1);
+
+    if (items && items.length > 0) {
+      targetId = items[0].id;
+    }
+  }
+
+  if (!targetId) {
+    return {
+      success: false,
+      actionType: 'takeoff.update_item',
+      message: 'Item not found',
+      undoable: false,
+    };
+  }
+
+  // Get current for undo
+  const { data: current } = await supabase
+    .from('takeoff_items')
+    .select('*')
+    .eq('id', targetId)
+    .single();
+
+  // Build update object from params
+  const updates: Record<string, unknown> = {};
+  if (params.new_description) updates.description = params.new_description;
+  if (params.quantity !== undefined) updates.quantity = params.quantity;
+  if (params.unit) updates.unit = params.unit;
+  if (params.unit_cost !== undefined) updates.unit_cost = params.unit_cost;
+  if (params.category) updates.category = params.category;
+
+  // Recalculate extended_cost if qty or cost changed
+  const qty = (updates.quantity ?? current?.quantity ?? 0) as number;
+  const cost = (updates.unit_cost ?? current?.unit_cost ?? 0) as number;
+  updates.extended_cost = qty * cost;
+
+  const { data: updated, error } = await supabase
+    .from('takeoff_items')
+    .update(updates)
+    .eq('id', targetId)
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  return {
+    success: true,
+    actionType: 'takeoff.update_item',
+    message: `Updated "${updated.description}"`,
+    data: { itemId: targetId },
+    undoable: true,
+    undoData: { itemId: targetId, previous: current },
   };
 }
 
@@ -905,14 +1137,25 @@ async function executeLearnPreference(
 
 /**
  * Execute pricing.lookup - Request live pricing for items
+ * Handles both single item (from AI) and array of items
  */
 async function executePricingLookup(
   params: Record<string, unknown>,
   context: ExecutionContext
 ): Promise<ExecutionResult> {
-  const items = params.items as string[];
+  // Handle AI param variations: single item string or items array
+  let items: string[] = [];
+  if (params.items && Array.isArray(params.items)) {
+    items = params.items as string[];
+  } else if (params.item) {
+    items = [params.item as string];
+  } else if (params.description) {
+    items = [params.description as string];
+  } else if (params.name) {
+    items = [params.name as string];
+  }
 
-  if (!items || items.length === 0) {
+  if (items.length === 0) {
     return {
       success: false,
       actionType: 'pricing.lookup',

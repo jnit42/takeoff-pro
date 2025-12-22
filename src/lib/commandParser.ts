@@ -10,6 +10,7 @@ export type ActionType =
   | 'takeoff.add_multiple'
   | 'takeoff.update_item'
   | 'takeoff.delete_item'
+  | 'takeoff.delete_items'
   | 'takeoff.generate_drafts_from_assemblies'
   | 'takeoff.promote_drafts'
   | 'takeoff.delete_drafts'
