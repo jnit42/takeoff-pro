@@ -320,32 +320,21 @@ async function scrapeStorePrices(
     return [];
   }
 
-  const results: Array<{
-    store: string;
-    productName: string;
-    price: number | null;
-    unit: string;
-    sku: string | null;
-    productUrl: string | null;
-    inStock: boolean;
-    rawData: Record<string, unknown>;
-  }> = [];
-
   const normalizedItem = normalizeSearchTerm(item);
   const specs = extractProductSpecs(item);
 
-  for (const store of stores.slice(0, 2)) {
+  // Build scrape promises for PARALLEL execution
+  const scrapePromises = stores.slice(0, 2).map(async (store) => {
     const startTime = Date.now();
     let searchUrl = '';
     
     try {
       if (store.toLowerCase() === 'home depot') {
-        // Updated HD URL format - use their search API format
         searchUrl = `https://www.homedepot.com/s/${encodeURIComponent(normalizedItem)}?NCNI-5&storeId=121&zipCode=${zipCode}`;
       } else if (store.toLowerCase() === "lowe's" || store.toLowerCase() === 'lowes') {
         searchUrl = `https://www.lowes.com/search?searchTerm=${encodeURIComponent(normalizedItem)}&zipCode=${zipCode}`;
       } else {
-        continue;
+        return [];
       }
 
       console.log(`[price-lookup] Scraping ${store} for: ${normalizedItem} (URL: ${searchUrl})`);
@@ -371,8 +360,8 @@ async function scrapeStorePrices(
                       name: { type: 'string', description: 'Full product name' },
                       price: { type: 'number', description: 'Price in dollars as a number (e.g., 5.98 not "$5.98")' },
                       unit: { type: 'string', description: 'Unit of measure like "each", "per piece", "per sq ft"' },
-                      sku: { type: 'string', description: 'Product SKU or item number' },
-                      productUrl: { type: 'string', description: 'Full URL to the product page' },
+                      sku: { type: 'string', description: 'Product SKU or item number (the actual store item number, not made up)' },
+                      productUrl: { type: 'string', description: 'The COMPLETE product URL starting with https:// - extract from href attribute' },
                       inStock: { type: 'boolean', description: 'Whether the item is in stock' },
                       brand: { type: 'string', description: 'Brand name' },
                     },
@@ -386,14 +375,14 @@ async function scrapeStorePrices(
             prompt: `Extract the first 5 product search results from this ${store} page. For each product:
 - name: the full product name including dimensions
 - price: just the number (e.g., 5.98)
-- sku: the item number or SKU (look for "Item #" or "Model #")
-- productUrl: the FULL URL to view that specific product (starts with https://)
+- sku: the REAL item/model number shown on the page (look for "Item #" or "Model #") - DO NOT make up numbers
+- productUrl: the COMPLETE URL to the product page - must start with https://www.${store.toLowerCase().replace("'", '').replace(' ', '')}.com
 - inStock: true if available, false if out of stock
 
 Search term: ${item}`
           },
-          waitFor: 3000,
-          timeout: 20000,
+          waitFor: 2000,
+          timeout: 15000,
         }),
       });
 
@@ -415,7 +404,7 @@ Search term: ${item}`
           searchUrl,
           durationMs
         );
-        continue;
+        return [];
       }
 
       const data = await response.json();
@@ -435,9 +424,20 @@ Search term: ${item}`
           searchUrl,
           durationMs
         );
-        continue;
+        return [];
       }
       
+      const storeResults: Array<{
+        store: string;
+        productName: string;
+        price: number | null;
+        unit: string;
+        sku: string | null;
+        productUrl: string | null;
+        inStock: boolean;
+        rawData: Record<string, unknown>;
+      }> = [];
+
       if (data.data?.extract?.products && data.data.extract.products.length > 0) {
         console.log(`[price-lookup] ${store} returned ${data.data.extract.products.length} products`);
         
@@ -445,18 +445,29 @@ Search term: ${item}`
           const confidence = calculateMatchConfidence(item, product.name, specs);
           
           if (confidence >= 0.4) {
-            // Build proper product URL - prefer extracted URL, fallback to constructed
-            let productUrl = product.productUrl || product.url || null;
-            if (!productUrl || !productUrl.startsWith('http')) {
-              productUrl = buildProductUrl(store, product.sku, product.name);
+            // Validate and clean productUrl from Firecrawl
+            let productUrl: string | null = null;
+            
+            if (product.productUrl && typeof product.productUrl === 'string') {
+              const url = product.productUrl.trim();
+              // Only accept URLs that start with valid store domains
+              if (url.startsWith('https://www.homedepot.com/') || 
+                  url.startsWith('https://www.lowes.com/')) {
+                productUrl = url;
+              }
             }
             
-            results.push({
+            // Fallback to search URL if no valid product URL
+            if (!productUrl) {
+              productUrl = buildProductUrl(store, null, product.name);
+            }
+            
+            storeResults.push({
               store,
               productName: product.name,
               price: product.price || null,
               unit: product.unit || 'EA',
-              sku: product.sku || null,
+              sku: isValidSku(product.sku) ? product.sku : null,
               productUrl,
               inStock: product.inStock !== false,
               rawData: { ...product, searchUrl, confidence, specs },
@@ -479,6 +490,8 @@ Search term: ${item}`
           durationMs
         );
       }
+
+      return storeResults;
     } catch (error) {
       const durationMs = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -496,10 +509,13 @@ Search term: ${item}`
         searchUrl,
         durationMs
       );
+      return [];
     }
-  }
+  });
 
-  return results;
+  // Wait for all scrapes in parallel
+  const allResults = await Promise.all(scrapePromises);
+  return allResults.flat();
 }
 
 // ========================================

@@ -1048,7 +1048,8 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                                     <Input
                                       type="number"
                                       step="0.01"
-                                      value={item.unit_cost || 0}
+                                      value={item.unit_cost || ''}
+                                      placeholder="—"
                                       onChange={(e) =>
                                         handleInputChange(item.id, 'unit_cost', e.target.value)
                                       }
@@ -1079,7 +1080,7 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                                   </div>
                                 </TableCell>
                                 <TableCell className="text-right font-mono font-medium">
-                                  {formatCurrency(item.extended_cost || 0)}
+                                  {item.extended_cost ? formatCurrency(item.extended_cost) : '—'}
                                 </TableCell>
                                 <TableCell>
                                   <Input
