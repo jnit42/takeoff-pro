@@ -124,6 +124,7 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Voice input with enhanced status
   const { 
@@ -150,11 +151,16 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
     autoPunctuation: true,
   });
 
-  // Auto-scroll to bottom
+  // Auto-scroll to bottom when messages change - with smooth animation
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    // Use requestAnimationFrame to ensure DOM is updated
+    requestAnimationFrame(() => {
+      scrollToBottom();
+    });
   }, [messages]);
 
   // Count actual items in pending actions (handles takeoff.add_multiple)
@@ -638,6 +644,8 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
                       </div>
                     </div>
                   ))}
+                  {/* Scroll anchor - always at bottom */}
+                  <div ref={messagesEndRef} />
                 </div>
               </ScrollArea>
 
