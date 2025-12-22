@@ -323,6 +323,83 @@ async function scrapeStorePrices(
   const normalizedItem = normalizeSearchTerm(item);
   const specs = extractProductSpecs(item);
 
+  // Helper to make a Firecrawl request with retry
+  const scrapeWithRetry = async (
+    store: string, 
+    searchUrl: string, 
+    retries: number = 1
+  ): Promise<Response | null> => {
+    // Home Depot needs longer timeout - their site is slower
+    const timeout = store.toLowerCase() === 'home depot' ? 25000 : 15000;
+    const waitTime = store.toLowerCase() === 'home depot' ? 3000 : 2000;
+    
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      if (attempt > 0) {
+        console.log(`[price-lookup] Retry ${attempt} for ${store}`);
+      }
+      
+      try {
+        const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${firecrawlKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url: searchUrl,
+            formats: ['extract'],
+            extract: {
+              schema: {
+                type: 'object',
+                properties: {
+                  products: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        name: { type: 'string', description: 'Full product name' },
+                        price: { type: 'number', description: 'Price in dollars as a number (e.g., 5.98 not "$5.98")' },
+                        unit: { type: 'string', description: 'Unit of measure like "each", "per piece", "per sq ft"' },
+                        sku: { type: 'string', description: 'Product SKU or item number (the actual store item number, not made up)' },
+                        productUrl: { type: 'string', description: 'The COMPLETE product URL starting with https:// - extract from href attribute' },
+                        inStock: { type: 'boolean', description: 'Whether the item is in stock' },
+                        brand: { type: 'string', description: 'Brand name' },
+                      },
+                      required: ['name', 'price']
+                    },
+                    maxItems: 5
+                  }
+                },
+                required: ['products']
+              },
+              prompt: `Extract the first 5 product search results from this ${store} page. For each product:
+- name: the full product name including dimensions
+- price: just the number (e.g., 5.98)
+- sku: the REAL item/model number shown on the page (look for "Item #" or "Model #") - DO NOT make up numbers
+- productUrl: the COMPLETE URL to the product page - must start with https://www.${store.toLowerCase().replace("'", '').replace(' ', '')}.com
+- inStock: true if available, false if out of stock
+
+Search term: ${item}`
+            },
+            waitFor: waitTime,
+            timeout: timeout,
+          }),
+        });
+        
+        // If successful or non-timeout error, return immediately
+        if (response.ok || response.status !== 408) {
+          return response;
+        }
+        
+        // On timeout, continue to retry
+        console.log(`[price-lookup] Timeout for ${store}, attempt ${attempt + 1}/${retries + 1}`);
+      } catch (e) {
+        console.error(`[price-lookup] Fetch error for ${store}:`, e);
+      }
+    }
+    return null;
+  };
+
   // Build scrape promises for PARALLEL execution
   const scrapePromises = stores.slice(0, 2).map(async (store) => {
     const startTime = Date.now();
@@ -339,54 +416,18 @@ async function scrapeStorePrices(
 
       console.log(`[price-lookup] Scraping ${store} for: ${normalizedItem} (URL: ${searchUrl})`);
 
-      const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${firecrawlKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          url: searchUrl,
-          formats: ['extract'],
-          extract: {
-            schema: {
-              type: 'object',
-              properties: {
-                products: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      name: { type: 'string', description: 'Full product name' },
-                      price: { type: 'number', description: 'Price in dollars as a number (e.g., 5.98 not "$5.98")' },
-                      unit: { type: 'string', description: 'Unit of measure like "each", "per piece", "per sq ft"' },
-                      sku: { type: 'string', description: 'Product SKU or item number (the actual store item number, not made up)' },
-                      productUrl: { type: 'string', description: 'The COMPLETE product URL starting with https:// - extract from href attribute' },
-                      inStock: { type: 'boolean', description: 'Whether the item is in stock' },
-                      brand: { type: 'string', description: 'Brand name' },
-                    },
-                    required: ['name', 'price']
-                  },
-                  maxItems: 5
-                }
-              },
-              required: ['products']
-            },
-            prompt: `Extract the first 5 product search results from this ${store} page. For each product:
-- name: the full product name including dimensions
-- price: just the number (e.g., 5.98)
-- sku: the REAL item/model number shown on the page (look for "Item #" or "Model #") - DO NOT make up numbers
-- productUrl: the COMPLETE URL to the product page - must start with https://www.${store.toLowerCase().replace("'", '').replace(' ', '')}.com
-- inStock: true if available, false if out of stock
-
-Search term: ${item}`
-          },
-          waitFor: 2000,
-          timeout: 15000,
-        }),
-      });
+      // Use retry for Home Depot since it times out frequently
+      const retries = store.toLowerCase() === 'home depot' ? 1 : 0;
+      const response = await scrapeWithRetry(store, searchUrl, retries);
 
       const durationMs = Date.now() - startTime;
+
+      if (!response) {
+        console.error(`[price-lookup] All retries failed for ${store}`);
+        await logScrapeFailure(userId, store, normalizedItem, zipCode, 'http_error', 
+          `All retries failed`, 408, searchUrl, '', durationMs);
+        return [];
+      }
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
