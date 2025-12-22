@@ -496,7 +496,13 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const results: Record<string, PriceResult[]> = {};
-    const itemsToProcess = items.slice(0, MAX_ITEMS_PER_REQUEST);
+    const itemsToProcess = items
+      .slice(0, MAX_ITEMS_PER_REQUEST)
+      .filter((item: string) => {
+        // Skip placeholder items that won't match anything
+        const normalized = item.toLowerCase().trim();
+        return normalized !== 'new item' && normalized.length > 2;
+      });
     let scrapesPerformed = 0;
 
     console.log('[price-lookup] Processing', itemsToProcess.length, 'items. forceRefresh:', forceRefresh);
@@ -504,7 +510,6 @@ serve(async (req) => {
     for (const item of itemsToProcess) {
       const searchTerm = normalizeSearchTerm(item);
       const itemResults: PriceResult[] = [];
-      let needsScrape = forceRefresh;
 
       // ========================================
       // PRIORITY 1: Global Cache (store_sku_mappings)
@@ -538,11 +543,6 @@ serve(async (req) => {
         for (const cat of catalogItems as any[]) {
           for (const mapping of (cat.store_sku_mappings || [])) {
             const status = getCacheStatus(mapping.last_price_at);
-            
-            // If we have stale data and forceRefresh, mark for scrape
-            if (status === 'stale' && forceRefresh) {
-              needsScrape = true;
-            }
             
             // Return cached price regardless (UI will show status indicator)
             itemResults.push({
@@ -642,27 +642,88 @@ serve(async (req) => {
       // PRIORITY 4: Knowledge Base (fallback benchmarks)
       // ========================================
       if (itemResults.length === 0) {
-        const { data: knowledgeItems } = await supabase
+        // Build search terms for better matching
+        const searchTerms = searchTerm.toLowerCase().split(/[\s\-_]+/).filter(t => t.length > 1);
+        
+        // Try multiple search strategies
+        let knowledgeItems: Array<{ 
+          value: number | null; 
+          unit: string | null; 
+          display_name: string;
+          confidence_score: number | null;
+          region: string | null;
+          updated_at: string;
+        }> = [];
+        
+        // Strategy 1: Search by key
+        const { data: byKey } = await supabase
           .from('construction_knowledge')
-          .select('*')
+          .select('value, unit, display_name, confidence_score, region, updated_at')
           .eq('knowledge_type', 'material_cost')
-          .ilike('key', `%${searchTerm.replace(/\s+/g, '_')}%`)
-          .limit(2);
-
-        if (knowledgeItems && knowledgeItems.length > 0) {
-          for (const k of knowledgeItems) {
-            itemResults.push({
-              source: 'knowledge_base',
-              status: 'stale',
-              price: k.value,
-              unit: k.unit || 'EA',
-              productName: k.display_name,
-              confidence: k.confidence_score || 0.5,
-              matchType: 'fuzzy',
-              note: k.region ? `⚠️ Benchmark (${k.region})` : '⚠️ Historical benchmark',
-              lastUpdated: k.updated_at,
-            });
+          .ilike('key', `%${searchTerm.replace(/[^a-zA-Z0-9]/g, '%')}%`)
+          .limit(3);
+        
+        if (byKey && byKey.length > 0) {
+          knowledgeItems = byKey;
+        }
+        
+        // Strategy 2: Search by display_name if no key matches
+        if (knowledgeItems.length === 0) {
+          const { data: byName } = await supabase
+            .from('construction_knowledge')
+            .select('value, unit, display_name, confidence_score, region, updated_at')
+            .eq('knowledge_type', 'material_cost')
+            .ilike('display_name', `%${searchTerms[0] || searchTerm}%`)
+            .limit(3);
+          
+          if (byName && byName.length > 0) {
+            knowledgeItems = byName;
           }
+        }
+        
+        // Strategy 3: Match common construction items by keywords
+        if (knowledgeItems.length === 0) {
+          const materialKeywords: Record<string, string[]> = {
+            '2x4': ['2x4x8_stud'],
+            '2x6': ['2x6x8_stud'],
+            'stud': ['2x4x8_stud', '2x6x8_stud'],
+            'drywall': ['drywall_1_2_4x8', 'drywall_5_8_4x8'],
+            'sheetrock': ['drywall_1_2_4x8'],
+            'osb': ['osb_7_16_4x8'],
+            'plywood': ['plywood_1_2_4x8'],
+            'shingle': ['arch_shingles_sq'],
+            'concrete': ['concrete_4000psi_cy'],
+          };
+          
+          for (const [keyword, keys] of Object.entries(materialKeywords)) {
+            if (searchTerm.toLowerCase().includes(keyword)) {
+              const { data: byKeyword } = await supabase
+                .from('construction_knowledge')
+                .select('value, unit, display_name, confidence_score, region, updated_at')
+                .eq('knowledge_type', 'material_cost')
+                .in('key', keys)
+                .limit(2);
+              
+              if (byKeyword && byKeyword.length > 0) {
+                knowledgeItems = byKeyword;
+                break;
+              }
+            }
+          }
+        }
+
+        for (const k of knowledgeItems) {
+          itemResults.push({
+            source: 'knowledge_base',
+            status: 'stale',
+            price: k.value,
+            unit: k.unit || 'EA',
+            productName: k.display_name,
+            confidence: k.confidence_score || 0.5,
+            matchType: 'fuzzy',
+            note: k.region ? `⚠️ Benchmark (${k.region})` : '⚠️ Historical benchmark - Click refresh for current price',
+            lastUpdated: k.updated_at,
+          });
         }
       }
 
