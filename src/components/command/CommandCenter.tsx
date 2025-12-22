@@ -273,6 +273,7 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
           body: { 
             message: commandText,
             projectId,
+            userId: user?.id,
             conversationHistory,
             isFollowUp: true
           }
@@ -339,6 +340,7 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
           body: { 
             message: commandText,
             projectId,
+            userId: user?.id,
             conversationHistory
           }
         });

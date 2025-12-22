@@ -11,7 +11,10 @@ import {
   CheckCircle2,
   FileUp,
   Trash,
-  MapPin
+  MapPin,
+  DollarSign,
+  ExternalLink,
+  RefreshCw
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -22,7 +25,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { PlanLinkBadge } from './PlanLinkBadge';
 import { OverrideBadge } from './OverrideBadge';
-import { TooltipProvider } from '@/components/ui/tooltip';
+import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import {
   Table,
   TableBody,
@@ -47,6 +50,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { TAKEOFF_CATEGORIES, UNITS, formatCurrency, formatNumber } from '@/lib/constants';
 
@@ -78,12 +87,24 @@ interface TakeoffBuilderProps {
   };
 }
 
+interface PriceResult {
+  store: string;
+  price: number | null;
+  unit: string;
+  productName: string;
+  productUrl: string;
+  inStock: boolean;
+}
+
 export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [showDrafts, setShowDrafts] = useState(true);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [priceResults, setPriceResults] = useState<Record<string, PriceResult[]>>({});
+  const [priceLookupItem, setPriceLookupItem] = useState<TakeoffItem | null>(null);
+  const [isLoadingPrices, setIsLoadingPrices] = useState(false);
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['takeoff-items', projectId],
@@ -99,6 +120,57 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
       return data as TakeoffItem[];
     },
   });
+
+  // Fetch project for zip code
+  const { data: projectData } = useQuery({
+    queryKey: ['project-details', projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('zip_code, region')
+        .eq('id', projectId)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Price lookup mutation
+  const priceLookupMutation = useMutation({
+    mutationFn: async (itemDescriptions: string[]) => {
+      setIsLoadingPrices(true);
+      const { data, error } = await supabase.functions.invoke('price-lookup', {
+        body: { 
+          items: itemDescriptions,
+          zipCode: projectData?.zip_code || undefined,
+        }
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data.success && data.results) {
+        setPriceResults(prev => ({ ...prev, ...data.results }));
+        toast({ title: 'Prices loaded from Home Depot & Lowes' });
+      } else {
+        toast({ title: 'No prices found', variant: 'destructive' });
+      }
+      setIsLoadingPrices(false);
+    },
+    onError: (error) => {
+      toast({ title: 'Price lookup failed', description: error.message, variant: 'destructive' });
+      setIsLoadingPrices(false);
+    },
+  });
+
+  // Apply price from lookup
+  const applyPrice = (itemId: string, price: number, vendor: string) => {
+    updateItemMutation.mutate({ 
+      id: itemId, 
+      updates: { unit_cost: price, vendor } 
+    });
+    toast({ title: `Applied $${price.toFixed(2)} from ${vendor}` });
+  };
 
   // Fetch blueprint measurements for all items in this project
   const { data: allMeasurements = [] } = useQuery({
@@ -472,8 +544,30 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
       {/* Add Item Section */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-lg">Add Line Item</CardTitle>
-          <CardDescription>Select a category to add a new takeoff item</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg">Add Line Item</CardTitle>
+              <CardDescription>Select a category to add a new takeoff item</CardDescription>
+            </div>
+            {items.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const descriptions = items.slice(0, 5).map(i => i.description);
+                  priceLookupMutation.mutate(descriptions);
+                }}
+                disabled={isLoadingPrices || items.length === 0}
+              >
+                {isLoadingPrices ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <DollarSign className="h-4 w-4 mr-2" />
+                )}
+                Check Live Prices
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-2">
@@ -512,6 +606,83 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Price Lookup Dialog */}
+      <Dialog open={!!priceLookupItem} onOpenChange={(open) => !open && setPriceLookupItem(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5 text-primary" />
+              Live Prices: {priceLookupItem?.description}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {priceResults[priceLookupItem?.description || '']?.length > 0 ? (
+              priceResults[priceLookupItem?.description || ''].map((result, idx) => (
+                <Card key={idx} className="p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium capitalize">{result.store}</p>
+                      <p className="text-sm text-muted-foreground truncate max-w-[200px]">
+                        {result.productName}
+                      </p>
+                      {result.price && (
+                        <p className="text-lg font-mono font-bold text-primary">
+                          ${result.price.toFixed(2)}/{result.unit}
+                        </p>
+                      )}
+                      <Badge variant={result.inStock ? 'default' : 'secondary'} className="mt-1">
+                        {result.inStock ? 'In Stock' : 'Out of Stock'}
+                      </Badge>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {result.price && priceLookupItem && (
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            applyPrice(priceLookupItem.id, result.price!, result.store);
+                            setPriceLookupItem(null);
+                          }}
+                        >
+                          Apply
+                        </Button>
+                      )}
+                      {result.productUrl && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open(result.productUrl, '_blank')}
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </Card>
+              ))
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <DollarSign className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p>No prices found yet</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => {
+                    if (priceLookupItem) {
+                      priceLookupMutation.mutate([priceLookupItem.description]);
+                    }
+                  }}
+                  disabled={isLoadingPrices}
+                >
+                  {isLoadingPrices ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                  Search Now
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Takeoff Table by Category */}
       {Object.keys(itemsByCategory).length === 0 ? (
@@ -681,15 +852,37 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                                 {item.packages || 0}
                               </TableCell>
                               <TableCell>
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  value={item.unit_cost || 0}
-                                  onChange={(e) =>
-                                    handleInputChange(item.id, 'unit_cost', e.target.value)
-                                  }
-                                  className="h-8 text-right font-mono"
-                                />
+                                <div className="flex items-center gap-1">
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    value={item.unit_cost || 0}
+                                    onChange={(e) =>
+                                      handleInputChange(item.id, 'unit_cost', e.target.value)
+                                    }
+                                    className="h-8 text-right font-mono w-20"
+                                  />
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8 text-muted-foreground hover:text-primary"
+                                          onClick={() => {
+                                            setPriceLookupItem(item);
+                                            if (!priceResults[item.description]) {
+                                              priceLookupMutation.mutate([item.description]);
+                                            }
+                                          }}
+                                        >
+                                          <DollarSign className="h-4 w-4" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>Check live prices</TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                </div>
                               </TableCell>
                               <TableCell className="text-right font-mono font-medium">
                                 {formatCurrency(item.extended_cost || 0)}
