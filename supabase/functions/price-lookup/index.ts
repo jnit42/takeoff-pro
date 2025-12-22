@@ -268,24 +268,24 @@ async function logScrapeFailure(
 // ========================================
 
 function buildProductUrl(store: string, sku: string | null, productName: string): string | null {
-  if (!sku && !productName) return null;
+  // Only build URL if we have a valid SKU (not placeholder numbers)
+  if (!sku || sku === '123456' || !/^[A-Za-z0-9-]+$/.test(sku) || sku.length < 5) {
+    // Return search URL as fallback
+    const encodedName = encodeURIComponent(productName);
+    if (store.toLowerCase() === 'home depot') {
+      return `https://www.homedepot.com/s/${encodedName}`;
+    } else if (store.toLowerCase() === "lowe's" || store.toLowerCase() === 'lowes') {
+      return `https://www.lowes.com/search?searchTerm=${encodedName}`;
+    }
+    return null;
+  }
   
   const cleanName = productName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').slice(0, 60);
   
   if (store.toLowerCase() === 'home depot') {
-    // Home Depot URL format: /p/PRODUCT-NAME/SKU
-    if (sku) {
-      return `https://www.homedepot.com/p/${cleanName}/${sku}`;
-    }
-    // Fallback to search
-    return `https://www.homedepot.com/s/${encodeURIComponent(productName)}`;
+    return `https://www.homedepot.com/p/${cleanName}/${sku}`;
   } else if (store.toLowerCase() === "lowe's" || store.toLowerCase() === 'lowes') {
-    // Lowe's URL format: /pd/PRODUCT-NAME/SKU
-    if (sku) {
-      return `https://www.lowes.com/pd/${cleanName}/${sku}`;
-    }
-    // Fallback to search
-    return `https://www.lowes.com/search?searchTerm=${encodeURIComponent(productName)}`;
+    return `https://www.lowes.com/pd/${cleanName}/${sku}`;
   }
   
   return null;
