@@ -48,7 +48,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       if (data?.actions?.length > 0) {
         await supabase.functions.invoke('ai-command-parse', {
           body: {
-            command: input,
+            message: input,
             projectId,
             execute: true,
             proposedActions: data.actions,
