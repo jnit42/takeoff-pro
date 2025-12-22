@@ -10,14 +10,10 @@ import {
   Loader2,
   FileText,
   Wand2,
-  FileQuestion,
-  AlertCircle,
-  ListChecks,
   Calculator,
-  Terminal,
-  MoreVertical,
   Handshake,
   Receipt,
+  ClipboardList,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -30,9 +26,7 @@ import { PlanFilesManager } from '@/components/plans/PlanFilesManager';
 import { ProjectSettings } from '@/components/project/ProjectSettings';
 import { CostSummary } from '@/components/project/CostSummary';
 import { GCWizard } from '@/components/wizard/GCWizard';
-import { RFIsManager } from '@/components/wizard/RFIsManager';
-import { AssumptionsManager } from '@/components/wizard/AssumptionsManager';
-import { ChecklistManager } from '@/components/wizard/ChecklistManager';
+import { ScopeManager } from '@/components/scope/ScopeManager';
 import { CommandCenter } from '@/components/command/CommandCenter';
 import { SubcontractorManager } from '@/components/subcontractors/SubcontractorManager';
 import { ActualsTab } from '@/components/actuals/ActualsTab';
@@ -48,19 +42,13 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
-// Tab configuration
+// Simplified tab configuration - 6 tabs instead of 12
 const TABS = [
   { id: 'summary', label: 'Summary', icon: Calculator },
-  { id: 'command', label: 'Command', icon: Terminal },
-  { id: 'wizard', label: 'Wizard', icon: Wand2 },
-  { id: 'rfis', label: 'RFIs', icon: FileQuestion },
-  { id: 'assumptions', label: 'Assumptions', icon: AlertCircle },
-  { id: 'checklist', label: 'Checklist', icon: ListChecks },
-  { id: 'takeoff', label: 'Takeoff', icon: FileSpreadsheet },
+  { id: 'scope', label: 'Scope', icon: ClipboardList },
+  { id: 'takeoff', label: 'Materials', icon: FileSpreadsheet },
   { id: 'labor', label: 'Labor', icon: Users },
-  { id: 'subs', label: 'Subs', icon: Handshake },
   { id: 'actuals', label: 'Actuals', icon: Receipt },
-  { id: 'plans', label: 'Plans', icon: FileText },
   { id: 'settings', label: 'Settings', icon: Settings },
 ] as const;
 
@@ -284,15 +272,15 @@ export default function ProjectDetail() {
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleExportRFIsCSV}>
-                  <FileQuestion className="h-4 w-4 mr-2" />
+                  <ClipboardList className="h-4 w-4 mr-2" />
                   RFIs CSV
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleExportAssumptionsCSV}>
-                  <AlertCircle className="h-4 w-4 mr-2" />
+                  <ClipboardList className="h-4 w-4 mr-2" />
                   Assumptions CSV
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleExportChecklistCSV}>
-                  <ListChecks className="h-4 w-4 mr-2" />
+                  <ClipboardList className="h-4 w-4 mr-2" />
                   Checklist CSV
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -363,7 +351,7 @@ export default function ProjectDetail() {
               <Card className={openRfis > 0 ? 'border-warning/50' : ''}>
                 <CardContent className="p-3">
                   <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                    <FileQuestion className="h-3.5 w-3.5" />
+                    <ClipboardList className="h-3.5 w-3.5" />
                     Open RFIs
                   </div>
                   <div className="font-semibold">{openRfis}</div>
@@ -372,7 +360,7 @@ export default function ProjectDetail() {
               <Card>
                 <CardContent className="p-3">
                   <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                    <ListChecks className="h-3.5 w-3.5" />
+                    <ClipboardList className="h-3.5 w-3.5" />
                     Checklist
                   </div>
                   <div className="font-semibold">{pendingChecklist} pending</div>
@@ -384,36 +372,52 @@ export default function ProjectDetail() {
           {/* Tab Content */}
           <div className="min-h-0">
             {activeTab === 'summary' && (
-              <CostSummary projectId={id!} project={project} />
-            )}
-            {activeTab === 'command' && (
-              <div className="h-[calc(100vh-200px)] min-h-[400px]">
-                <CommandCenter projectId={id!} projectType={undefined} className="h-full" />
+              <div className="space-y-6">
+                {/* Command Center embedded in Summary */}
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Wand2 className="h-5 w-5 text-primary" />
+                      AI Command Center
+                    </CardTitle>
+                    <CardDescription>Talk to your estimating assistant</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className="h-[300px]">
+                      <CommandCenter projectId={id!} projectType={undefined} className="h-full border-0" />
+                    </div>
+                  </CardContent>
+                </Card>
+                <CostSummary projectId={id!} project={project} />
               </div>
             )}
-            {activeTab === 'wizard' && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>GC Wizard Results</CardTitle>
-                  <CardDescription>Run the wizard to generate RFIs, assumptions, and checklists</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button variant="accent" onClick={() => setShowWizard(true)}>
-                    <Wand2 className="h-4 w-4 mr-2" />
-                    Run GC Wizard
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-            {activeTab === 'rfis' && <RFIsManager projectId={id!} />}
-            {activeTab === 'assumptions' && <AssumptionsManager projectId={id!} />}
-            {activeTab === 'checklist' && <ChecklistManager projectId={id!} />}
+            {activeTab === 'scope' && <ScopeManager projectId={id!} />}
             {activeTab === 'takeoff' && <TakeoffBuilder projectId={id!} project={project} />}
             {activeTab === 'labor' && <LaborEstimator projectId={id!} project={project} />}
-            {activeTab === 'subs' && <SubcontractorManager projectId={id!} />}
             {activeTab === 'actuals' && <ActualsTab projectId={id!} />}
-            {activeTab === 'plans' && <PlanFilesManager projectId={id!} planFileId={searchParams.get('planFileId') || undefined} />}
-            {activeTab === 'settings' && <ProjectSettings project={project} />}
+            {activeTab === 'settings' && (
+              <div className="space-y-6">
+                <ProjectSettings project={project} />
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Plan Files</CardTitle>
+                    <CardDescription>Upload and manage project blueprints</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <PlanFilesManager projectId={id!} planFileId={searchParams.get('planFileId') || undefined} />
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Subcontractors</CardTitle>
+                    <CardDescription>Manage subs assigned to this project</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <SubcontractorManager projectId={id!} />
+                  </CardContent>
+                </Card>
+              </div>
+            )}
           </div>
         </main>
       </div>

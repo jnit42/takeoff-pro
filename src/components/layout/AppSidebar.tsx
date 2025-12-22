@@ -1,25 +1,20 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   FolderKanban,
-  FileSpreadsheet,
-  DollarSign,
   Settings,
-  BarChart3,
   LogOut,
   HardHat,
-  Terminal,
+  Library,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { getFormattedVersion } from '@/lib/appVersion';
 
+// Simplified navigation - 3 main items
 const navItems = [
   { to: '/projects', label: 'Projects', icon: FolderKanban },
-  { to: '/command-center', label: 'Command Center', icon: Terminal },
-  { to: '/templates', label: 'Templates', icon: FileSpreadsheet },
-  { to: '/rate-library', label: 'Rate Library', icon: DollarSign },
-  { to: '/reports', label: 'Reports', icon: BarChart3 },
+  { to: '/library', label: 'Library', icon: Library },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
