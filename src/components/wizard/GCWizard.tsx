@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Wand2, 
@@ -11,7 +11,8 @@ import {
   FileQuestion,
   ListChecks,
   Package,
-  MessageCircle
+  MessageCircle,
+  Sparkles
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -19,7 +20,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { useLearning } from '@/hooks/useLearning';
 import { 
   PROJECT_TYPES, 
   getQuestionsForProjectType,
@@ -63,6 +66,7 @@ interface Assembly {
 export function GCWizard({ projectId, onComplete }: GCWizardProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { logEvent, saveAssemblyPreset, getSuggestedAssemblies } = useLearning();
   
   const [step, setStep] = useState<WizardStep>('type');
   const [projectType, setProjectType] = useState<string>('');
@@ -72,6 +76,7 @@ export function GCWizard({ projectId, onComplete }: GCWizardProps) {
   const [extractedVariables, setExtractedVariables] = useState<Record<string, number>>({});
   const [conversationHistory, setConversationHistory] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [suggestedAssemblies, setSuggestedAssemblies] = useState<{ assemblyIds: string[]; timesUsed: number } | null>(null);
 
   const questions = projectType ? getQuestionsForProjectType(projectType) : [];
   const currentQuestion = questions[currentQuestionIndex];
@@ -111,6 +116,19 @@ export function GCWizard({ projectId, onComplete }: GCWizardProps) {
   const allItems = selectedAssemblies.flatMap(a => a.items);
   const requiredVariables = getRequiredVariables(allItems);
   const missingVariables = requiredVariables.filter(v => !(v in extractedVariables));
+
+  // Load suggested assemblies when project type is selected
+  useEffect(() => {
+    if (projectType) {
+      getSuggestedAssemblies(projectType).then((suggested) => {
+        if (suggested && suggested.assemblyIds.length > 0) {
+          setSuggestedAssemblies(suggested);
+          // Pre-select suggested assemblies
+          setSelectedAssemblyIds(suggested.assemblyIds);
+        }
+      });
+    }
+  }, [projectType, getSuggestedAssemblies]);
 
   const submitWizardMutation = useMutation({
     mutationFn: async () => {
@@ -253,6 +271,25 @@ export function GCWizard({ projectId, onComplete }: GCWizardProps) {
       queryClient.invalidateQueries({ queryKey: ['checklist-items', projectId] });
       queryClient.invalidateQueries({ queryKey: ['wizard-runs', projectId] });
       queryClient.invalidateQueries({ queryKey: ['takeoff-items', projectId] });
+      
+      // Log learning events
+      logEvent('assembly_selected', {
+        project_type: projectType,
+        assembly_count: selectedAssemblyIds.length,
+        assembly_ids: selectedAssemblyIds,
+      }, projectId);
+      
+      logEvent('draft_generated', {
+        draft_count: data.drafts,
+        rfi_count: data.rfis,
+        assumption_count: data.assumptions,
+        checklist_count: data.checklist,
+      }, projectId);
+      
+      // Save assembly preset for future suggestions
+      if (selectedAssemblyIds.length > 0) {
+        saveAssemblyPreset(projectType, selectedAssemblyIds);
+      }
       
       toast({
         title: 'GC Wizard Complete',
@@ -453,6 +490,16 @@ export function GCWizard({ projectId, onComplete }: GCWizardProps) {
             </span>
           </div>
           <Progress value={getProgress()} className="h-2" />
+          
+          {/* Show suggested assemblies indicator */}
+          {suggestedAssemblies && suggestedAssemblies.timesUsed > 0 && (
+            <div className="flex items-center gap-2 mt-3 p-2 bg-accent/10 rounded-lg">
+              <Sparkles className="h-4 w-4 text-accent" />
+              <span className="text-xs text-accent">
+                Pre-selected from your history ({suggestedAssemblies.timesUsed} previous {projectType.replace('_', ' ')} projects)
+              </span>
+            </div>
+          )}
         </CardHeader>
         <CardContent className="space-y-6">
           <AssemblySelector

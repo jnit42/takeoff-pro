@@ -272,6 +272,36 @@ export type Database = {
         }
         Relationships: []
       }
+      assembly_presets: {
+        Row: {
+          assemblies: Json
+          created_at: string
+          id: string
+          last_used_at: string
+          project_type: string
+          times_used: number
+          user_id: string
+        }
+        Insert: {
+          assemblies?: Json
+          created_at?: string
+          id?: string
+          last_used_at?: string
+          project_type: string
+          times_used?: number
+          user_id?: string
+        }
+        Update: {
+          assemblies?: Json
+          created_at?: string
+          id?: string
+          last_used_at?: string
+          project_type?: string
+          times_used?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       assumptions: {
         Row: {
           created_at: string
@@ -796,6 +826,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      labor_rate_calibration: {
+        Row: {
+          base_rate: number
+          created_at: string
+          id: string
+          last_used_at: string
+          modifiers_json: Json | null
+          sample_count: number
+          task_key: string
+          trade: string
+          unit: string
+          user_id: string
+        }
+        Insert: {
+          base_rate: number
+          created_at?: string
+          id?: string
+          last_used_at?: string
+          modifiers_json?: Json | null
+          sample_count?: number
+          task_key: string
+          trade: string
+          unit?: string
+          user_id?: string
+        }
+        Update: {
+          base_rate?: number
+          created_at?: string
+          id?: string
+          last_used_at?: string
+          modifiers_json?: Json | null
+          sample_count?: number
+          task_key?: string
+          trade?: string
+          unit?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       labor_tasks: {
         Row: {
@@ -1842,6 +1911,65 @@ export type Database = {
           is_system?: boolean | null
           name?: string
           type?: string
+        }
+        Relationships: []
+      }
+      user_events: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          payload: Json | null
+          project_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          payload?: Json | null
+          project_id?: string | null
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          payload?: Json | null
+          project_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_events_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_learning_settings: {
+        Row: {
+          created_at: string
+          id: string
+          learning_enabled: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          learning_enabled?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          learning_enabled?: boolean
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
