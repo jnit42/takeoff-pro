@@ -94,6 +94,15 @@ export async function executeAction(
       case 'plans.open':
         return await executePlansOpen(action.params, context);
 
+      case 'learn.terminology':
+        return await executeLearnTerminology(action.params, context);
+
+      case 'learn.preference':
+        return await executeLearnPreference(action.params, context);
+
+      case 'pricing.lookup':
+        return await executePricingLookup(action.params, context);
+
       default:
         return {
           success: false,
@@ -815,6 +824,173 @@ async function executeQAShowIssues(
     },
     undoable: false,
   };
+}
+
+/**
+ * Execute learn.terminology - Save user's terminology correction
+ */
+async function executeLearnTerminology(
+  params: Record<string, unknown>,
+  context: ExecutionContext
+): Promise<ExecutionResult> {
+  const term = params.term as string;
+  const meaning = params.meaning as string;
+  const contextInfo = params.context as string | undefined;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await supabase.from('ai_knowledge' as any).insert({
+    user_id: context.userId,
+    category: 'terminology',
+    key: term,
+    value: { meaning, context: contextInfo },
+    source: 'user_correction',
+    confidence: 1.0,
+  } as any);
+
+  if (error) {
+    console.error('[Learn] Failed to save terminology:', error);
+    return {
+      success: false,
+      actionType: 'learn.terminology',
+      message: 'Failed to save terminology',
+      undoable: false,
+    };
+  }
+
+  return {
+    success: true,
+    actionType: 'learn.terminology',
+    message: `Got it! I'll remember "${term}" for future estimates.`,
+    undoable: false,
+  };
+}
+
+/**
+ * Execute learn.preference - Save user's preference
+ */
+async function executeLearnPreference(
+  params: Record<string, unknown>,
+  context: ExecutionContext
+): Promise<ExecutionResult> {
+  const preference = params.preference as string;
+  const value = params.value;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await supabase.from('ai_knowledge' as any).insert({
+    user_id: context.userId,
+    category: 'preference',
+    key: preference,
+    value: { value },
+    source: 'user_stated',
+    confidence: 1.0,
+  } as any);
+
+  if (error) {
+    console.error('[Learn] Failed to save preference:', error);
+    return {
+      success: false,
+      actionType: 'learn.preference',
+      message: 'Failed to save preference',
+      undoable: false,
+    };
+  }
+
+  return {
+    success: true,
+    actionType: 'learn.preference',
+    message: `Noted! I'll remember that preference.`,
+    undoable: false,
+  };
+}
+
+/**
+ * Execute pricing.lookup - Request live pricing for items
+ */
+async function executePricingLookup(
+  params: Record<string, unknown>,
+  context: ExecutionContext
+): Promise<ExecutionResult> {
+  const items = params.items as string[];
+
+  if (!items || items.length === 0) {
+    return {
+      success: false,
+      actionType: 'pricing.lookup',
+      message: 'No items specified for price lookup',
+      undoable: false,
+    };
+  }
+
+  // Get project zip code if available
+  let zipCode: string | undefined;
+  if (context.projectId) {
+    const { data: project } = await supabase
+      .from('projects')
+      .select('zip_code, region')
+      .eq('id', context.projectId)
+      .single();
+    
+    zipCode = project?.zip_code || undefined;
+  }
+
+  try {
+    const { data, error } = await supabase.functions.invoke('price-lookup', {
+      body: { items, zipCode },
+    });
+
+    if (error) {
+      console.error('[Pricing] Lookup error:', error);
+      return {
+        success: false,
+        actionType: 'pricing.lookup',
+        message: 'Price lookup failed. Make sure Firecrawl connector is enabled.',
+        undoable: false,
+      };
+    }
+
+    if (!data?.success) {
+      return {
+        success: false,
+        actionType: 'pricing.lookup',
+        message: data?.error || 'Price lookup returned no results',
+        undoable: false,
+      };
+    }
+
+    // Format results for display
+    const results = data.results as Record<string, Array<{ store: string; price: number | null; unit: string; productName: string }>>;
+    const formattedResults: string[] = [];
+    
+    for (const [item, prices] of Object.entries(results)) {
+      if (prices && prices.length > 0) {
+        const priceStrings = prices
+          .filter(p => p.price !== null)
+          .map(p => `${p.store}: $${p.price}/${p.unit}`)
+          .join(', ');
+        if (priceStrings) {
+          formattedResults.push(`${item}: ${priceStrings}`);
+        }
+      }
+    }
+
+    return {
+      success: true,
+      actionType: 'pricing.lookup',
+      message: formattedResults.length > 0 
+        ? `Found pricing:\n${formattedResults.join('\n')}`
+        : 'No pricing found for those items. Try more specific product names.',
+      data: { results },
+      undoable: false,
+    };
+  } catch (e) {
+    console.error('[Pricing] Exception:', e);
+    return {
+      success: false,
+      actionType: 'pricing.lookup',
+      message: 'Price lookup service unavailable',
+      undoable: false,
+    };
+  }
 }
 
 /**
