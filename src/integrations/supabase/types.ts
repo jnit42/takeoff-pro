@@ -1438,6 +1438,9 @@ export type Database = {
           markup_percent: number | null
           name: string
           region: string | null
+          site_access: string | null
+          site_occupancy: string | null
+          site_parking: string | null
           status: string | null
           tax_percent: number | null
           updated_at: string
@@ -1454,6 +1457,9 @@ export type Database = {
           markup_percent?: number | null
           name: string
           region?: string | null
+          site_access?: string | null
+          site_occupancy?: string | null
+          site_parking?: string | null
           status?: string | null
           tax_percent?: number | null
           updated_at?: string
@@ -1470,6 +1476,9 @@ export type Database = {
           markup_percent?: number | null
           name?: string
           region?: string | null
+          site_access?: string | null
+          site_occupancy?: string | null
+          site_parking?: string | null
           status?: string | null
           tax_percent?: number | null
           updated_at?: string
