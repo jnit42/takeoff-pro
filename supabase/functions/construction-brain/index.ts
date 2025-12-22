@@ -26,6 +26,11 @@ interface PastCorrection {
   actual_amount: number;
   variance_percent: number;
   correction_type: string;
+  // Calibration-specific fields
+  original?: string;
+  corrected?: string;
+  reason?: string;
+  modification?: Record<string, unknown>;
 }
 
 interface ProjectContext {
@@ -414,7 +419,7 @@ async function buildProjectContext(supabase: any, projectId: string | null, user
   }
 
   // ========================================
-  // NEW: Fetch past corrections from ai_decisions
+  // Fetch past corrections from ai_decisions
   // ========================================
   const { data: corrections } = await supabase
     .from('ai_decisions')
@@ -434,6 +439,35 @@ async function buildProjectContext(supabase: any, projectId: string | null, user
       correction_type: 'user_override',
       modification: c.user_modification,
     }));
+  }
+
+  // ========================================
+  // Fetch calibration knowledge from ai_knowledge
+  // ========================================
+  const { data: calibrationKnowledge } = await supabase
+    .from('ai_knowledge')
+    .select('category, key, value, confidence, usage_count')
+    .eq('user_id', userId)
+    .eq('category', 'calibration_correction')
+    .order('updated_at', { ascending: false })
+    .limit(20);
+  
+  if (calibrationKnowledge && calibrationKnowledge.length > 0) {
+    // Append calibration corrections to pastCorrections
+    for (const k of calibrationKnowledge) {
+      const val = k.value as { original?: string; correction?: string; reason?: string };
+      context.pastCorrections = context.pastCorrections || [];
+      context.pastCorrections.push({
+        description: k.key,
+        original_estimate: 0,
+        actual_amount: 0,
+        variance_percent: 0,
+        correction_type: 'calibration',
+        original: val.original,
+        corrected: val.correction,
+        reason: val.reason,
+      });
+    }
   }
 
   return context;
@@ -568,14 +602,24 @@ CRITICAL: If the user has a specific rate listed above, YOU MUST use it instead 
     : '';
 
   // ========================================
-  // NEW: Past corrections section
+  // Past corrections + calibration section
   // ========================================
-  const pastCorrectionsSection = projectContext.pastCorrections?.length
-    ? `\n\n=== PAST CORRECTIONS (LEARN FROM THESE) ===
-The user has corrected your estimates before. Apply these lessons:
-${projectContext.pastCorrections.slice(0, 5).map(c => `- "${c.description}": User modified your output. Adjust accordingly.`).join('\n')}
+  const calibrationCorrections = projectContext.pastCorrections?.filter(c => c.correction_type === 'calibration') || [];
+  const userOverrides = projectContext.pastCorrections?.filter(c => c.correction_type !== 'calibration') || [];
+  
+  const pastCorrectionsSection = (calibrationCorrections.length > 0 || userOverrides.length > 0)
+    ? `\n\n=== CALIBRATION CORRECTIONS (APPLY THESE STRICTLY) ===
+${calibrationCorrections.length > 0 ? calibrationCorrections.slice(0, 10).map(c => 
+  `- "${c.description}": 
+    WRONG: ${c.original || 'See modification'}
+    CORRECT: ${c.corrected || 'See modification'}
+    REASON: ${c.reason || 'User correction'}`
+).join('\n') : 'No calibration corrections yet.'}
 
-IMPORTANT: If you're estimating similar items, apply the user's preferred approach.`
+=== USER OVERRIDES ===
+${userOverrides.length > 0 ? userOverrides.slice(0, 5).map(c => `- "${c.description}": User modified your output. Adjust accordingly.`).join('\n') : 'None'}
+
+CRITICAL: Calibration corrections are MANDATORY. If you're asked about a topic with a correction, you MUST apply the corrected approach, not your default reasoning.`
     : '';
 
   return `You are the Construction Brain - an expert estimating AI with 50+ years of field experience. You think like a veteran GC who's seen it all.
