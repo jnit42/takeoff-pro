@@ -5,3 +5,9 @@ verify_jwt = false
 
 [functions.price-lookup]
 verify_jwt = false
+
+[functions.receipt-ocr]
+verify_jwt = false
+
+[functions.contribute-global-knowledge]
+verify_jwt = false
