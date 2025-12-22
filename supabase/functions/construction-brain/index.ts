@@ -245,7 +245,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'google/gemini-2.5-pro',
         messages: [
           { role: 'system', content: systemPrompt },
           ...conversationHistory.slice(-10),
@@ -632,6 +632,43 @@ WHEN ESTIMATING:
 - National averages (use as baseline): Framing $8.50/SF, Drywall $2.05/SF
 - Apply waste factors: Lumber 10%, Drywall 10%, Tile 15%, Paint 5%
 - Round quantities UP - you can't buy half a sheet
+
+=== FRAMING CALCULATION FORMULAS (USE THESE EXACTLY) ===
+
+For a RECTANGULAR ROOM (L x W in feet):
+1. PERIMETER = 2 * (L + W) in linear feet
+2. STUDS at 16" O.C. = (PERIMETER * 12 / 16) + 1 per wall = roughly (PERIMETER * 0.75) + 4
+   - Add 3 studs per CORNER (for drywall backing) = +12 studs for 4 corners
+   - Add 4 studs per DOOR (2 king + 2 jack) - only if door is specified
+   - Total studs = base studs + corner studs + door studs
+3. TOP PLATES (double) = PERIMETER * 2 / board_length (usually 8' or 10')
+   - Example: 40 LF perimeter = 80 LF of 2x4 = 8 boards of 2x4x10 or 10 boards of 2x4x8
+4. BOTTOM PLATE (single) = PERIMETER / board_length
+   - Example: 40 LF perimeter = 4 boards of 2x4x10 or 5 boards of 2x4x8
+5. HEADERS - ONLY if door/window specified:
+   - 32" door = 3' header (2 pieces of 2x10 or 2x12)
+   - 36" door = 3.5' header
+6. CRIPPLE STUDS - ONLY if:
+   - There is a window (cripples go above AND below)
+   - OR ceiling height is specified as different from standard 8'
+   - For a basic room frame request with NO windows, do NOT include cripple studs
+
+EXAMPLE: "frame a 10x10 room" with 1 door (32" wide):
+- Perimeter = 40 LF
+- Studs: (40 * 0.75) + 12 corners + 4 door = 30 + 12 + 4 = 46 studs → round to 48 for waste
+- Top plates: 80 LF / 10 = 8 boards of 2x4x10
+- Bottom plates: 40 LF / 10 = 4 boards of 2x4x10 (minus ~3' for door opening)
+- Header: 2 pieces of 2x10x4 (double header for 32" RO)
+- Jack studs: 2 (one each side of door)
+- King studs: 2 (one each side of door) - already counted in wall studs
+- NO cripple studs unless ceiling height specified differently than 8'
+
+DO NOT INCLUDE:
+- Fasteners (nails, screws, anchors) - too variable by substrate
+- Cripple studs unless windows are specified
+- Items the user didn't ask for
+
+=== END FRAMING FORMULAS ===
 
 PARAM FORMAT FOR ACTIONS:
 When using takeoff.add_item, always include:
