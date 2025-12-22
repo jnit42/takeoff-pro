@@ -373,10 +373,13 @@ async function scrapeStorePrices(
                 required: ['products']
               },
               prompt: `Extract the first 5 product search results from this ${store} page. For each product:
-- name: the full product name including dimensions
+- name: the full product name including dimensions and brand
 - price: just the number (e.g., 5.98)
 - sku: the REAL item/model number shown on the page (look for "Item #" or "Model #") - DO NOT make up numbers
-- productUrl: the COMPLETE URL to the product page - must start with https://www.${store.toLowerCase().replace("'", '').replace(' ', '')}.com
+- productUrl: Extract the ACTUAL href link to the individual product page. 
+  - For Home Depot: Look for links containing "/p/" (e.g., https://www.homedepot.com/p/Product-Name/123456789)
+  - For Lowe's: Look for links containing "/pd/" (e.g., https://www.lowes.com/pd/Product-Name/123456)
+  - DO NOT use category links (/b/, /c/, /pl/) or search links (/s/, /search/)
 - inStock: true if available, false if out of stock
 
 Search term: ${item}`
@@ -482,7 +485,7 @@ Search term: ${item}`
       if (data.data?.extract?.products && data.data.extract.products.length > 0) {
         console.log(`[price-lookup] ${store} returned ${data.data.extract.products.length} products`);
         
-        for (const product of data.data.extract.products.slice(0, 3)) {
+        for (const product of data.data.extract.products.slice(0, 5)) {
           const confidence = calculateMatchConfidence(item, product.name, specs);
           
           if (confidence >= 0.4) {

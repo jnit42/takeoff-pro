@@ -123,11 +123,35 @@ export async function executeAction(
           undoable: false,
         };
     }
-  } catch (error) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (error: any) {
+    console.error('Command Execution Failed:', error);
+    
+    let message = 'Unknown error';
+    
+    // 1. Standard Error object
+    if (error instanceof Error) {
+      message = error.message;
+    }
+    // 2. Supabase/Postgres Error (Object with message/details/code)
+    else if (typeof error === 'object' && error !== null) {
+      message = error.message || error.error_description || '';
+      if (error.details) message += ` (${error.details})`;
+      if (error.code) message += ` [Code: ${error.code}]`;
+      // Fallback to stringify if still empty
+      if (!message) {
+        try {
+          message = JSON.stringify(error);
+        } catch {
+          message = 'Unknown error';
+        }
+      }
+    }
+
     return {
       success: false,
       actionType: action.type,
-      message: error instanceof Error ? error.message : 'Unknown error',
+      message,
       undoable: false,
     };
   }
