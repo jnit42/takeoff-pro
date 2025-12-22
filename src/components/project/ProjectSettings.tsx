@@ -20,7 +20,27 @@ interface Project {
   labor_burden_percent: number | null;
   currency: string | null;
   status: string | null;
+  site_access: string | null;
+  site_occupancy: string | null;
+  site_parking: string | null;
 }
+
+// Site condition multipliers
+const SITE_ACCESS_OPTIONS = [
+  { value: 'ground_level', label: 'Ground Level', multiplier: 1.0 },
+  { value: 'stairs_only', label: 'Stairs Only (No Elevator)', multiplier: 1.15 },
+  { value: 'elevator', label: 'Elevator Available', multiplier: 1.05 },
+];
+
+const SITE_OCCUPANCY_OPTIONS = [
+  { value: 'vacant', label: 'Vacant', multiplier: 1.0 },
+  { value: 'occupied', label: 'Occupied/Furnished', multiplier: 1.15 },
+];
+
+const SITE_PARKING_OPTIONS = [
+  { value: 'driveway', label: 'Driveway/Lot', multiplier: 1.0 },
+  { value: 'street', label: 'Street/Paid Parking', multiplier: 1.10 },
+];
 
 interface ProjectSettingsProps {
   project: Project;
@@ -95,6 +115,95 @@ export function ProjectSettings({ project }: ProjectSettingsProps) {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Site Conditions */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Site Conditions</CardTitle>
+          <CardDescription>
+            Real-world factors that affect labor costs. The AI will automatically apply these multipliers.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="site_access">Access</Label>
+              <Select
+                defaultValue={project.site_access || 'ground_level'}
+                onValueChange={(value) => handleChange('site_access' as keyof Project, value)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SITE_ACCESS_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label} ({option.multiplier}x)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                4th floor walk-up = +15% labor
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="site_occupancy">Occupancy</Label>
+              <Select
+                defaultValue={project.site_occupancy || 'vacant'}
+                onValueChange={(value) => handleChange('site_occupancy' as keyof Project, value)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SITE_OCCUPANCY_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label} ({option.multiplier}x)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Working around furniture = +15% labor
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="site_parking">Parking</Label>
+              <Select
+                defaultValue={project.site_parking || 'driveway'}
+                onValueChange={(value) => handleChange('site_parking' as keyof Project, value)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SITE_PARKING_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label} ({option.multiplier}x)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Street parking = +10% labor
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 p-3 bg-muted rounded-lg">
+            <p className="text-sm font-medium">
+              Combined Site Multiplier: {(
+                (SITE_ACCESS_OPTIONS.find(o => o.value === (project.site_access || 'ground_level'))?.multiplier || 1) *
+                (SITE_OCCUPANCY_OPTIONS.find(o => o.value === (project.site_occupancy || 'vacant'))?.multiplier || 1) *
+                (SITE_PARKING_OPTIONS.find(o => o.value === (project.site_parking || 'driveway'))?.multiplier || 1)
+              ).toFixed(2)}x
+            </p>
+            <p className="text-xs text-muted-foreground">
+              All labor estimates will be automatically adjusted by this factor
+            </p>
           </div>
         </CardContent>
       </Card>

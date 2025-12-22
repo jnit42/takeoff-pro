@@ -38,7 +38,13 @@ interface ProjectContext {
     waste_percent: number;
     tax_percent: number;
     labor_burden_percent: number;
+    // Site conditions
+    site_access: string;
+    site_occupancy: string;
+    site_parking: string;
   };
+  // Combined site difficulty multiplier
+  siteDifficultyMultiplier?: number;
   takeoffItems?: Array<{
     description: string;
     quantity: number;
@@ -339,6 +345,17 @@ async function buildProjectContext(supabase: any, projectId: string | null, user
   
   if (project) {
     context.project = project;
+    
+    // Calculate site difficulty multiplier
+    const accessMultiplier = 
+      project.site_access === 'stairs_only' ? 1.15 :
+      project.site_access === 'elevator' ? 1.05 : 1.0;
+    const occupancyMultiplier = 
+      project.site_occupancy === 'occupied' ? 1.15 : 1.0;
+    const parkingMultiplier = 
+      project.site_parking === 'street' ? 1.10 : 1.0;
+    
+    context.siteDifficultyMultiplier = accessMultiplier * occupancyMultiplier * parkingMultiplier;
   }
 
   // Get takeoff items
@@ -498,6 +515,15 @@ function extractKeywords(message: string): string[] {
 // ========================================
 
 function buildSystemPrompt(projectContext: ProjectContext, knowledgeContext: KnowledgeContext): string {
+  const siteDifficultyInfo = projectContext.siteDifficultyMultiplier && projectContext.siteDifficultyMultiplier !== 1.0
+    ? `
+SITE DIFFICULTY MULTIPLIER: ${projectContext.siteDifficultyMultiplier.toFixed(2)}x
+- Access: ${projectContext.project?.site_access || 'ground_level'}
+- Occupancy: ${projectContext.project?.site_occupancy || 'vacant'}
+- Parking: ${projectContext.project?.site_parking || 'driveway'}
+CRITICAL: Apply this ${projectContext.siteDifficultyMultiplier.toFixed(2)}x multiplier to ALL labor estimates automatically.`
+    : '';
+
   const projectInfo = projectContext.project 
     ? `
 CURRENT PROJECT: "${projectContext.project.name}"
@@ -507,7 +533,7 @@ CURRENT PROJECT: "${projectContext.project.name}"
 - Waste Factor: ${projectContext.project.waste_percent}%
 - Tax: ${projectContext.project.tax_percent}%
 - Labor Burden: ${projectContext.project.labor_burden_percent}%
-`
+${siteDifficultyInfo}`
     : 'No project currently selected.';
 
   const existingItems = projectContext.takeoffItems?.length
