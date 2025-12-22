@@ -96,39 +96,39 @@ export function ActualsTab({ projectId, projectName, className }: ActualsTabProp
 
   return (
     <div className={cn('flex flex-col h-full', className)}>
-      {/* Summary Header */}
-      <div className="grid grid-cols-4 gap-3 mb-4">
-        <Card className="p-3">
-          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-            <Receipt className="h-3.5 w-3.5" />
+      {/* Summary Header - 2x2 grid on mobile, 4 cols on desktop */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4">
+        <Card className="p-2 sm:p-3">
+          <div className="flex items-center gap-1.5 text-muted-foreground text-[10px] sm:text-xs mb-1">
+            <Receipt className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
             Receipts
           </div>
-          <p className="text-lg font-bold">{receipts.length}</p>
+          <p className="text-base sm:text-lg font-bold">{receipts.length}</p>
         </Card>
-        <Card className="p-3">
-          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-            <DollarSign className="h-3.5 w-3.5" />
+        <Card className="p-2 sm:p-3">
+          <div className="flex items-center gap-1.5 text-muted-foreground text-[10px] sm:text-xs mb-1">
+            <DollarSign className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
             Estimated
           </div>
-          <p className="text-lg font-bold">{formatCurrency(actualsSummary?.totalEstimated || 0)}</p>
+          <p className="text-base sm:text-lg font-bold">{formatCurrency(actualsSummary?.totalEstimated || 0)}</p>
         </Card>
-        <Card className="p-3">
-          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-            <History className="h-3.5 w-3.5" />
+        <Card className="p-2 sm:p-3">
+          <div className="flex items-center gap-1.5 text-muted-foreground text-[10px] sm:text-xs mb-1">
+            <History className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
             Actual
           </div>
-          <p className="text-lg font-bold">{formatCurrency(actualsSummary?.totalActual || 0)}</p>
+          <p className="text-base sm:text-lg font-bold">{formatCurrency(actualsSummary?.totalActual || 0)}</p>
         </Card>
         <Card className={cn(
-          'p-3',
+          'p-2 sm:p-3',
           (actualsSummary?.totalVariance || 0) > 0 ? 'bg-destructive/5' : 'bg-green-500/5'
         )}>
-          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-            <BarChart3 className="h-3.5 w-3.5" />
+          <div className="flex items-center gap-1.5 text-muted-foreground text-[10px] sm:text-xs mb-1">
+            <BarChart3 className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
             Variance
           </div>
           <p className={cn(
-            'text-lg font-bold',
+            'text-base sm:text-lg font-bold',
             (actualsSummary?.totalVariance || 0) > 0 ? 'text-destructive' : 'text-green-600'
           )}>
             {(actualsSummary?.totalVariance || 0) >= 0 ? '+' : ''}{formatCurrency(actualsSummary?.totalVariance || 0)}
@@ -142,24 +142,24 @@ export function ActualsTab({ projectId, projectName, className }: ActualsTabProp
         onValueChange={(v) => setActiveTab(v as typeof activeTab)} 
         className="flex-1 flex flex-col min-h-0"
       >
-        <div className="flex items-center justify-between mb-4">
-          <TabsList>
-            <TabsTrigger value="variance" className="gap-1.5">
-              <BarChart3 className="h-3.5 w-3.5" />
-              Variance
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <TabsList className="w-full sm:w-auto grid grid-cols-3 sm:inline-flex">
+            <TabsTrigger value="variance" className="gap-1 sm:gap-1.5 text-xs sm:text-sm">
+              <BarChart3 className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+              <span className="hidden xs:inline">Variance</span>
             </TabsTrigger>
-            <TabsTrigger value="receipts" className="gap-1.5">
-              <Receipt className="h-3.5 w-3.5" />
-              Receipts
+            <TabsTrigger value="receipts" className="gap-1 sm:gap-1.5 text-xs sm:text-sm">
+              <Receipt className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+              <span className="hidden xs:inline">Receipts</span>
               {receipts.length > 0 && (
                 <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
                   {receipts.length}
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="review" className="gap-1.5">
-              <BookOpen className="h-3.5 w-3.5" />
-              Review
+            <TabsTrigger value="review" className="gap-1 sm:gap-1.5 text-xs sm:text-sm">
+              <BookOpen className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+              <span className="hidden xs:inline">Review</span>
             </TabsTrigger>
           </TabsList>
 

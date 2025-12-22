@@ -436,36 +436,74 @@ export function LaborEstimator({ projectId, project }: LaborEstimatorProps) {
           <CardHeader>
             <CardTitle className="text-lg">Labor Pay Sheet</CardTitle>
           </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Task</TableHead>
-                  <TableHead className="text-right">Qty</TableHead>
-                  <TableHead className="text-right">Unit</TableHead>
-                  <TableHead className="text-right">Base Rate</TableHead>
-                  <TableHead className="text-right">Modifier</TableHead>
-                  <TableHead className="text-right">Adj Rate</TableHead>
-                  <TableHead className="text-right">Extended</TableHead>
-                  <TableHead className="w-[50px]"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {lineItems.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell className="font-medium">{item.task_name}</TableCell>
-                    <TableCell className="text-right font-mono">
-                      {formatNumber(item.quantity)}
-                    </TableCell>
-                    <TableCell className="text-right">{item.unit}</TableCell>
-                    <TableCell className="text-right font-mono">
-                      {formatCurrency(item.base_rate)}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-accent">
-                      x{item.modifier_multiplier.toFixed(2)}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {formatCurrency(item.final_rate || 0)}
+          <CardContent className="p-0 sm:p-6">
+            {/* Mobile card layout */}
+            <div className="sm:hidden space-y-2 p-4">
+              {lineItems.map((item) => (
+                <div key={item.id} className="border rounded-lg p-3 bg-muted/30">
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="font-medium text-sm">{item.task_name}</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      onClick={() => estimate && deleteLineItemMutation.mutate({ itemId: item.id, estimateId: estimate.id })}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground">
+                    <div>
+                      <span className="block">Qty</span>
+                      <span className="font-mono text-foreground">{formatNumber(item.quantity)} {item.unit}</span>
+                    </div>
+                    <div>
+                      <span className="block">Rate</span>
+                      <span className="font-mono text-foreground">{formatCurrency(item.final_rate || 0)}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="block">Extended</span>
+                      <span className="font-mono font-semibold text-accent">{formatCurrency(item.extended || 0)}</span>
+                    </div>
+                  </div>
+                  <div className="text-xs text-accent mt-1">
+                    x{item.modifier_multiplier.toFixed(2)} modifier
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            {/* Desktop table layout */}
+            <div className="hidden sm:block overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Task</TableHead>
+                    <TableHead className="text-right">Qty</TableHead>
+                    <TableHead className="text-right">Unit</TableHead>
+                    <TableHead className="text-right">Base Rate</TableHead>
+                    <TableHead className="text-right">Modifier</TableHead>
+                    <TableHead className="text-right">Adj Rate</TableHead>
+                    <TableHead className="text-right">Extended</TableHead>
+                    <TableHead className="w-[50px]"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {lineItems.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell className="font-medium">{item.task_name}</TableCell>
+                      <TableCell className="text-right font-mono">
+                        {formatNumber(item.quantity)}
+                      </TableCell>
+                      <TableCell className="text-right">{item.unit}</TableCell>
+                      <TableCell className="text-right font-mono">
+                        {formatCurrency(item.base_rate)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-accent">
+                        x{item.modifier_multiplier.toFixed(2)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {formatCurrency(item.final_rate || 0)}
                     </TableCell>
                     <TableCell className="text-right font-mono font-semibold">
                       {formatCurrency(item.extended || 0)}
@@ -489,10 +527,11 @@ export function LaborEstimator({ projectId, project }: LaborEstimatorProps) {
                 ))}
               </TableBody>
             </Table>
+            </div>
 
-            {/* Summary */}
-            <div className="flex justify-end mt-6">
-              <div className="w-72 space-y-2">
+            {/* Summary - responsive */}
+            <div className="flex justify-center sm:justify-end mt-4 sm:mt-6 px-4 sm:px-0">
+              <div className="w-full sm:w-72 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Labor Subtotal</span>
                   <span className="font-mono">{formatCurrency(total)}</span>
@@ -505,7 +544,7 @@ export function LaborEstimator({ projectId, project }: LaborEstimatorProps) {
                     {formatCurrency(total * ((project.labor_burden_percent || 0) / 100))}
                   </span>
                 </div>
-                <div className="flex justify-between text-lg font-semibold border-t pt-2">
+                <div className="flex justify-between text-base sm:text-lg font-semibold border-t pt-2">
                   <span>Total Labor Cost</span>
                   <span className="font-mono text-accent">{formatCurrency(burdenTotal)}</span>
                 </div>

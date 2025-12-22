@@ -75,28 +75,31 @@ export default function Settings() {
         </div>
 
         <Tabs defaultValue="profile" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="profile" className="gap-2">
-              <User className="h-4 w-4" />
-              <span className="hidden sm:inline">Profile</span>
-            </TabsTrigger>
-            <TabsTrigger value="calibration" className="gap-2">
-              <FlaskConical className="h-4 w-4" />
-              <span className="hidden sm:inline">Calibrate</span>
-            </TabsTrigger>
-            <TabsTrigger value="learning" className="gap-2">
-              <Sparkles className="h-4 w-4" />
-              <span className="hidden sm:inline">Learning</span>
-            </TabsTrigger>
-            <TabsTrigger value="ai-audit" className="gap-2">
-              <Brain className="h-4 w-4" />
-              <span className="hidden sm:inline">AI Audit</span>
-            </TabsTrigger>
-            <TabsTrigger value="knowledge" className="gap-2">
-              <BookOpen className="h-4 w-4" />
-              <span className="hidden sm:inline">Knowledge</span>
-            </TabsTrigger>
-          </TabsList>
+          {/* Mobile-optimized tabs with horizontal scroll */}
+          <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+            <TabsList className="inline-flex w-max sm:w-full sm:grid sm:grid-cols-5">
+              <TabsTrigger value="profile" className="gap-1.5 sm:gap-2 whitespace-nowrap px-3 sm:px-4">
+                <User className="h-4 w-4" />
+                <span className="hidden xs:inline sm:inline">Profile</span>
+              </TabsTrigger>
+              <TabsTrigger value="calibration" className="gap-1.5 sm:gap-2 whitespace-nowrap px-3 sm:px-4">
+                <FlaskConical className="h-4 w-4" />
+                <span className="hidden xs:inline sm:inline">Calibrate</span>
+              </TabsTrigger>
+              <TabsTrigger value="learning" className="gap-1.5 sm:gap-2 whitespace-nowrap px-3 sm:px-4">
+                <Sparkles className="h-4 w-4" />
+                <span className="hidden xs:inline sm:inline">Learning</span>
+              </TabsTrigger>
+              <TabsTrigger value="ai-audit" className="gap-1.5 sm:gap-2 whitespace-nowrap px-3 sm:px-4">
+                <Brain className="h-4 w-4" />
+                <span className="hidden xs:inline sm:inline">AI Audit</span>
+              </TabsTrigger>
+              <TabsTrigger value="knowledge" className="gap-1.5 sm:gap-2 whitespace-nowrap px-3 sm:px-4">
+                <BookOpen className="h-4 w-4" />
+                <span className="hidden xs:inline sm:inline">Knowledge</span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="profile">
             {isLoading ? (

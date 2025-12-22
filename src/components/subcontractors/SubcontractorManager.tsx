@@ -381,7 +381,7 @@ export function SubcontractorManager({ projectId, className }: SubcontractorMana
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => toast({ title: 'Coming soon', description: 'Quote history tracking will be available after you log quotes.' })}>
                               <History className="h-4 w-4 mr-2" />
                               View History
                             </DropdownMenuItem>
