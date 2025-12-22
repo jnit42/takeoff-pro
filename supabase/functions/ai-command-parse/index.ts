@@ -415,19 +415,38 @@ Example: If current list has 8 items and user says "add corner beads", your acti
     let parsed: ParseResult;
     try {
       let jsonStr = content.trim();
+      
+      // Remove markdown code blocks
       if (jsonStr.startsWith('```json')) jsonStr = jsonStr.slice(7);
       else if (jsonStr.startsWith('```')) jsonStr = jsonStr.slice(3);
       if (jsonStr.endsWith('```')) jsonStr = jsonStr.slice(0, -3);
+      jsonStr = jsonStr.trim();
       
-      parsed = JSON.parse(jsonStr.trim());
+      // Try to extract JSON from mixed content (AI sometimes adds text before/after JSON)
+      if (!jsonStr.startsWith('{')) {
+        const jsonMatch = jsonStr.match(/\{[\s\S]*"success"\s*:\s*(true|false)[\s\S]*\}/);
+        if (jsonMatch) {
+          jsonStr = jsonMatch[0];
+        }
+      }
+      
+      parsed = JSON.parse(jsonStr);
+      
+      // Validate the parsed object has required fields
+      if (typeof parsed.success !== 'boolean') {
+        throw new Error('Invalid response structure');
+      }
     } catch (e) {
       console.error('[AI Parse] JSON parse failed:', e);
+      console.log('[AI Parse] Raw content was:', content.slice(0, 500));
+      
+      // Return the AI's text response as a message so user can still see it
       return new Response(
         JSON.stringify({
           success: true,
           actions: [],
           followUpQuestions: [],
-          message: content.slice(0, 1000),
+          message: content.slice(0, 1500), // Show more of the AI's response
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
