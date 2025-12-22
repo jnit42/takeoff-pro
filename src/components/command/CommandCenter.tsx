@@ -64,6 +64,9 @@ interface Message {
   results?: ExecutionResult[];
   logId?: string;
   suggestions?: ParseSuggestion[];
+  decisionId?: string; // For AI decision tracking/correction
+  confidence?: number;
+  reasoning?: string;
 }
 
 interface CommandCenterProps {
@@ -188,6 +191,34 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
     return newMessage.id;
   };
 
+  // Handle AI correction - user can correct AI decisions
+  const handleCorrectDecision = async (decisionId: string, wasAccurate: boolean, modification?: string) => {
+    if (!user) return;
+    
+    try {
+      const { error } = await supabase
+        .from('ai_decisions')
+        .update({
+          was_accurate: wasAccurate,
+          user_response: wasAccurate ? 'confirmed' : 'corrected',
+          user_modification: modification ? { correction: modification } : null,
+          accuracy_determined_at: new Date().toISOString(),
+        })
+        .eq('id', decisionId);
+
+      if (error) throw error;
+
+      addMessage('system', wasAccurate 
+        ? '✓ Thanks! This helps me learn your preferences.' 
+        : '✓ Correction noted. I\'ll improve based on your feedback.');
+      
+      toast({ title: wasAccurate ? 'Decision confirmed' : 'Correction saved' });
+    } catch (err) {
+      console.error('[Correction] Error:', err);
+      toast({ title: 'Failed to save feedback', variant: 'destructive' });
+    }
+  };
+
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     
@@ -237,11 +268,11 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
           ? pendingActions.map(a => formatActionPreview(a)).join('\n')
           : '';
         
-        const { data, error } = await supabase.functions.invoke('ai-command-parse', {
+        // Use construction-brain for full AI reasoning
+        const { data, error } = await supabase.functions.invoke('construction-brain', {
           body: { 
             message: commandText,
-            projectContext: { projectId, projectType },
-            pendingActions: pendingContext,
+            projectId,
             conversationHistory,
             isFollowUp: true
           }
@@ -264,11 +295,17 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
             .map((a) => `• ${formatActionPreview(a)}`)
             .join('\n');
           
-          const msg = data.message ? `${data.message}\n\n` : '';
-          addMessage('preview', `${msg}Proposed:\n${actionPreview}\n\nRefine or say "confirm".`, { actions: newActions });
-        } else if (data.message) {
+          const confidenceText = data.confidence ? ` (${Math.round(data.confidence * 100)}% confident)` : '';
+          const msg = data.reasoning ? `${data.reasoning}${confidenceText}\n\n` : '';
+          addMessage('preview', `${msg}Proposed:\n${actionPreview}\n\nRefine or say "confirm".`, { 
+            actions: newActions,
+            decisionId: data.decisionId,
+            confidence: data.confidence,
+            reasoning: data.reasoning
+          });
+        } else if (data.reasoning || data.message) {
           // AI responded with explanation
-          addMessage('system', data.message);
+          addMessage('system', data.reasoning || data.message, { decisionId: data.decisionId });
         }
         
         return;
@@ -293,20 +330,21 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
       return;
     }
 
-    // If deterministic parser failed, try AI parsing
+    // If deterministic parser failed, try AI parsing with construction-brain
     if (!result.success) {
-      addMessage('system', '🤔 Thinking...');
+      addMessage('system', '🧠 Thinking...');
       
       try {
-        const { data, error } = await supabase.functions.invoke('ai-command-parse', {
+        const { data, error } = await supabase.functions.invoke('construction-brain', {
           body: { 
             message: commandText,
-            projectContext: { projectId, projectType }
+            projectId,
+            conversationHistory
           }
         });
 
         if (error) {
-          console.error('[AI Parse] Error:', error);
+          console.error('[Construction Brain] Error:', error);
           if (result.suggestions && result.suggestions.length > 0) {
             setMessages(prev => prev.slice(0, -1));
             addMessage('suggestion', result.error || "I couldn't understand that.", { suggestions: result.suggestions });
@@ -317,7 +355,7 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
           return;
         }
 
-        console.log('[AI Parse] Response:', data);
+        console.log('[Construction Brain] Response:', data);
         
         setMessages(prev => prev.slice(0, -1));
 
@@ -329,25 +367,26 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
           return;
         }
 
-        if (data.success && data.actions && data.actions.length > 0) {
+        if (data.actions && data.actions.length > 0) {
           result = {
             success: true,
             actions: data.actions,
             schemaVersion: result.schemaVersion,
-            parserVersion: result.parserVersion + '+AI'
+            parserVersion: result.parserVersion + '+Brain'
           };
           
-          // Show AI message with follow-up questions if any
-          const aiMessage = data.message || '';
-          const questions = data.followUpQuestions?.length > 0 
-            ? '\n\n' + data.followUpQuestions.join('\n') 
-            : '';
+          // Show AI reasoning with confidence
+          const confidenceText = data.confidence ? ` (${Math.round(data.confidence * 100)}% confident)` : '';
+          const reasoning = data.reasoning ? `${data.reasoning}${confidenceText}` : '';
           
-          if (aiMessage || questions) {
-            addMessage('system', (aiMessage + questions).trim());
+          if (reasoning) {
+            addMessage('system', reasoning, { 
+              decisionId: data.decisionId,
+              confidence: data.confidence 
+            });
           }
-        } else if (data.message) {
-          addMessage('system', data.message);
+        } else if (data.reasoning) {
+          addMessage('system', data.reasoning, { decisionId: data.decisionId });
           return;
         } else {
           if (result.suggestions && result.suggestions.length > 0) {
@@ -358,7 +397,7 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
           return;
         }
       } catch (err) {
-        console.error('[AI Parse] Exception:', err);
+        console.error('[Construction Brain] Exception:', err);
         setMessages(prev => prev.slice(0, -1));
         if (result.suggestions && result.suggestions.length > 0) {
           addMessage('suggestion', result.error || "I couldn't understand that.", { suggestions: result.suggestions });
@@ -618,6 +657,19 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
                               <p className="text-sm text-amber-800 dark:text-amber-200 font-medium">
                                 {msg.content.split('\n')[0]}
                               </p>
+                              {msg.confidence && (
+                                <div className="flex items-center gap-2">
+                                  <div className="h-1.5 flex-1 bg-amber-200 dark:bg-amber-800 rounded-full overflow-hidden">
+                                    <div 
+                                      className="h-full bg-amber-500 rounded-full transition-all"
+                                      style={{ width: `${msg.confidence * 100}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-xs text-amber-600 dark:text-amber-400">
+                                    {Math.round(msg.confidence * 100)}%
+                                  </span>
+                                </div>
+                              )}
                               <p className="text-xs text-amber-600 dark:text-amber-400">
                                 Review items below. Ask questions or say "confirm" when ready.
                               </p>
@@ -638,6 +690,33 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
                                   {s.label}
                                 </Badge>
                               ))}
+                            </div>
+                          )}
+                          {/* AI Decision Feedback - show for AI responses */}
+                          {msg.decisionId && msg.role === 'system' && (
+                            <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border/50">
+                              <span className="text-xs text-muted-foreground">Was this helpful?</span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs text-green-600 hover:text-green-700 hover:bg-green-50"
+                                onClick={() => handleCorrectDecision(msg.decisionId!, true)}
+                              >
+                                <Check className="h-3 w-3 mr-1" />
+                                Yes
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs text-destructive hover:bg-destructive/10"
+                                onClick={() => {
+                                  const correction = prompt('How should I improve? (optional)');
+                                  handleCorrectDecision(msg.decisionId!, false, correction || undefined);
+                                }}
+                              >
+                                <X className="h-3 w-3 mr-1" />
+                                No
+                              </Button>
                             </div>
                           )}
                         </div>

@@ -16,6 +16,8 @@ import {
   Calculator,
   Terminal,
   MoreVertical,
+  Handshake,
+  Receipt,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -32,6 +34,8 @@ import { RFIsManager } from '@/components/wizard/RFIsManager';
 import { AssumptionsManager } from '@/components/wizard/AssumptionsManager';
 import { ChecklistManager } from '@/components/wizard/ChecklistManager';
 import { CommandCenter } from '@/components/command/CommandCenter';
+import { SubcontractorManager } from '@/components/subcontractors/SubcontractorManager';
+import { ActualsTab } from '@/components/actuals/ActualsTab';
 import { formatCurrency } from '@/lib/constants';
 import { 
   exportTakeoffCSV, 
@@ -54,6 +58,8 @@ const TABS = [
   { id: 'checklist', label: 'Checklist', icon: ListChecks },
   { id: 'takeoff', label: 'Takeoff', icon: FileSpreadsheet },
   { id: 'labor', label: 'Labor', icon: Users },
+  { id: 'subs', label: 'Subs', icon: Handshake },
+  { id: 'actuals', label: 'Actuals', icon: Receipt },
   { id: 'plans', label: 'Plans', icon: FileText },
   { id: 'settings', label: 'Settings', icon: Settings },
 ] as const;
@@ -404,6 +410,8 @@ export default function ProjectDetail() {
             {activeTab === 'checklist' && <ChecklistManager projectId={id!} />}
             {activeTab === 'takeoff' && <TakeoffBuilder projectId={id!} project={project} />}
             {activeTab === 'labor' && <LaborEstimator projectId={id!} project={project} />}
+            {activeTab === 'subs' && <SubcontractorManager projectId={id!} />}
+            {activeTab === 'actuals' && <ActualsTab projectId={id!} />}
             {activeTab === 'plans' && <PlanFilesManager projectId={id!} planFileId={searchParams.get('planFileId') || undefined} />}
             {activeTab === 'settings' && <ProjectSettings project={project} />}
           </div>
