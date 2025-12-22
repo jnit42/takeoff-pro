@@ -267,25 +267,32 @@ async function logScrapeFailure(
 // BUILD PRODUCT URL
 // ========================================
 
+function isValidSku(sku: string | null): boolean {
+  if (!sku) return false;
+  // Reject common placeholder patterns
+  const placeholderPatterns = [
+    /^12345/,      // 123456, 1234567, etc.
+    /^23456/,      // 234567, etc.
+    /^00000/,      // All zeros
+    /^11111/,      // All ones
+    /^\d{6}$/,     // Exactly 6 digits (often fake)
+  ];
+  if (placeholderPatterns.some(p => p.test(sku))) return false;
+  // Must be alphanumeric with optional dashes, at least 5 chars
+  if (!/^[A-Za-z0-9-]+$/.test(sku) || sku.length < 5) return false;
+  // Real Lowe's SKUs are typically 6-10 digits, Home Depot are 9 digits
+  // But allow any reasonable length
+  return true;
+}
+
 function buildProductUrl(store: string, sku: string | null, productName: string): string | null {
-  // Only build URL if we have a valid SKU (not placeholder numbers)
-  if (!sku || sku === '123456' || !/^[A-Za-z0-9-]+$/.test(sku) || sku.length < 5) {
-    // Return search URL as fallback
-    const encodedName = encodeURIComponent(productName);
-    if (store.toLowerCase() === 'home depot') {
-      return `https://www.homedepot.com/s/${encodedName}`;
-    } else if (store.toLowerCase() === "lowe's" || store.toLowerCase() === 'lowes') {
-      return `https://www.lowes.com/search?searchTerm=${encodedName}`;
-    }
-    return null;
-  }
+  const encodedName = encodeURIComponent(productName);
   
-  const cleanName = productName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').slice(0, 60);
-  
+  // Always use search URL - direct product URLs are unreliable without verified SKUs
   if (store.toLowerCase() === 'home depot') {
-    return `https://www.homedepot.com/p/${cleanName}/${sku}`;
+    return `https://www.homedepot.com/s/${encodedName}`;
   } else if (store.toLowerCase() === "lowe's" || store.toLowerCase() === 'lowes') {
-    return `https://www.lowes.com/pd/${cleanName}/${sku}`;
+    return `https://www.lowes.com/search?searchTerm=${encodedName}`;
   }
   
   return null;
