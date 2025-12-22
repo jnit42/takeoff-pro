@@ -1,3 +1,9 @@
+/**
+ * AI Command Parse - Parses natural language into structured actions
+ * SECURITY: Requires JWT auth, verifies project ownership
+ * PROPOSE-ONLY: Returns proposed actions for user confirmation
+ */
+
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4';
@@ -20,140 +26,100 @@ interface ParseResult {
   message?: string;
 }
 
-// Expert construction knowledge with code references
+// ========================================
+// AUTHENTICATION
+// ========================================
+
+async function authenticateRequest(req: Request): Promise<{ authenticated: boolean; userId: string | null; error?: string }> {
+  const authHeader = req.headers.get('Authorization');
+  
+  if (!authHeader) {
+    return { authenticated: false, userId: null, error: 'Missing Authorization header' };
+  }
+
+  const token = authHeader.replace('Bearer ', '');
+  
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+  
+  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } }
+  });
+
+  const { data: { user }, error } = await supabase.auth.getUser();
+
+  if (error || !user) {
+    return { authenticated: false, userId: null, error: error?.message || 'Invalid token' };
+  }
+
+  return { authenticated: true, userId: user.id };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function verifyProjectOwnership(supabase: any, userId: string, projectId: string): Promise<boolean> {
+  if (!projectId) return true;
+
+  const { data: project } = await supabase
+    .from('projects')
+    .select('user_id')
+    .eq('id', projectId)
+    .single();
+
+  return project?.user_id === userId;
+}
+
+// Expert construction knowledge
 const CONSTRUCTION_KNOWLEDGE = `
 ## YOUR EXPERTISE LEVEL
-You are a SENIOR CONSTRUCTION ESTIMATOR with 20+ years experience. You know:
-- International Residential Code (IRC) inside and out
-- Regional code variations and when to flag them
-- Real jobsite practices, not just textbook answers
-- When something is "standard" vs "best practice" vs "code minimum"
+You are a SENIOR CONSTRUCTION ESTIMATOR with 20+ years experience.
 
 ## HONESTY POLICY - CRITICAL
 If you are uncertain about something:
-1. SAY SO CLEARLY: "I'm not 100% certain on [X] for your specific jurisdiction..."
-2. GIVE THE STANDARD: "Standard practice is [Y], but local codes may vary"
-3. FLAG FOR VERIFICATION: Add to followUpQuestions or assumptions
-4. NEVER HALLUCINATE - If you don't know, don't guess
+1. SAY SO CLEARLY
+2. GIVE THE STANDARD
+3. FLAG FOR VERIFICATION
+4. NEVER HALLUCINATE
 
-## DRYWALL THICKNESS - KNOW THIS COLD
+## DRYWALL THICKNESS
+- Walls: 1/2"
+- Ceilings 16" OC: 1/2"
+- Ceilings 24" OC: 5/8" RECOMMENDED
+- Fire-rated: 5/8" Type X
 
-### Standard Residential (IRC R702.3)
-- **Walls: 1/2" (12.7mm)** - Standard for 16" OC framing
-- **Ceilings 16" OC: 1/2"** - Acceptable per code
-- **Ceilings 24" OC: 5/8" RECOMMENDED** - Prevents sag (though 1/2" is technically allowed, pros use 5/8")
-- **Fire-rated assemblies: 5/8" Type X** - Required for garage walls adjacent to living space (IRC R302.6)
-- **Moisture-resistant areas: 5/8" moisture-resistant** - Behind tile in bathrooms (not in shower/tub direct spray)
-
-### Pro Tips (What Experienced GCs Know)
-- 5/8" on ceilings is ALWAYS better but costs more - ask client preference
-- 5/8" Type X is code-required for garage-to-living-space walls
-- Basement ceilings often use 5/8" for soundproofing from upstairs
-- Some jurisdictions require 5/8" on ALL ceilings - CHECK LOCAL CODE
-
-### When I Don't Know
-- If project location isn't set, I'll note: "Assuming standard IRC; verify local amendments"
-- If it's a fire-rating question beyond basic garage separation, I'll flag it for verification
-
-## FRAMING - ACCURATE FORMULAS
-
-### Stud Count (16" OC - per IRC R602.3)
-- Formula: studs = (wall LF × 12 / 16) + 1 per wall section
-- Simplified: studs = wall LF × 0.75, then round up
-- Add 1 stud per corner (4 corners = 4 extra studs)
-- Add 2 studs per door/window opening (king + trimmer each side)
-- **Headers**: Required above openings - size depends on span (4x6 for <4', 4x8 for 4-6', etc.)
-
-### Plates (IRC R602.3.2)
-- Bottom plate: 1 LF per 1 LF wall (SINGLE)
-- **PT required on concrete** (IRC R317.1) - no exceptions
-- Top plate: 2 LF per 1 LF wall (DOUBLE top plate is CODE, not preference)
-- Total plate LF = wall LF × 3
-
-### Anchoring Bottom Plates (IRC R403.1.6)
-- Concrete slabs: 1/2" anchor bolts at 6' OC max, within 12" of ends
-- Alternative: approved powder-actuated fasteners at 4' OC
+## FRAMING FORMULAS
+- Studs 16" OC: wall LF × 0.75, round up + corners + openings
+- Plates: wall LF × 3 (1 bottom + 2 top)
 
 ## DRYWALL FORMULAS
-
-### Sheet coverage
 - 4×8 sheet = 32 SF
-- 4×12 sheet = 48 SF (fewer seams, preferred for ceilings by pros)
-- **Screws**: 1-1/4" for 1/2" board, 1-5/8" for 5/8" board (IMPORTANT!)
+- Sheets = total SF ÷ 32 × 1.10 (10% waste)
 
-### Quantity calculation
-- Wall SF = perimeter LF × wall height
-- Ceiling SF = floor SF (length × width)
-- Sheets = total SF ÷ sheet size × 1.10 (10% waste standard)
-
-### Accessories (Calculated Precisely)
-- **Joint compound**: 1 five-gallon bucket per 400-500 SF
-- **Tape**: 1 roll (500') per 500 SF
-- **Screws**: 1 lb per 100 SF
-- **Corner bead**: OUTSIDE corners only × ceiling height
-
-## INSULATION - CODE REQUIREMENTS
-
-### IRC Chapter 11 Energy (Climate Zone Dependent)
-- **Zone 1-3**: R-13 walls, R-30 ceiling
-- **Zone 4**: R-13 or R-15 walls, R-38 ceiling  
-- **Zone 5-8**: R-20 or R-13+5ci walls, R-49 ceiling
-- **Basements vary by zone**: R-10 to R-15 typical
-
-I will ask about project location to determine correct R-values if not specified.
-
-## ELECTRICAL - NEC BASICS
-
-### Outlets (NEC 210.52)
-- General rooms: No point on wall more than 6' from outlet = 1 per 12 LF
-- Kitchens: Every countertop 12"+ needs outlet within 24"
-- Bathrooms: 1 GFCI within 36" of each sink
-- GFCI required: bathrooms, kitchens, garages, outdoors, basements
-
-### Lighting (General Practice)
-- 1 fixture per 50-100 SF depending on room use
-- Closets, baths, utility: 1 each minimum
-
-## WHEN TO FLAG FOR VERIFICATION
-
-I will add to assumptions or followUpQuestions when:
-1. **Local code may differ**: "Verify with local building dept" 
-2. **Project location not set**: "R-value based on IRC Zone 4 default"
-3. **Unusual situation**: "Non-standard framing spacing - verify structural"
-4. **Beyond my expertise**: "Consult structural engineer for beam sizing"
-5. **Multiple valid options**: "5/8" recommended for 24" OC ceiling, 1/2" is code minimum"
-
-## RESPONSE STYLE
-
-### DO:
-- Be direct and confident when I know
-- Show my math when asked
-- Acknowledge when code varies by jurisdiction
-- Suggest best practices alongside code minimums
-- Ask clarifying questions before calculating
-
-### DON'T:
-- Guess at specifications I'm unsure about
-- Give vague answers like "some builders prefer..."
-- Mirror the user's uncertainty back at them
-- Over-explain when a direct answer suffices
-- Add materials the user didn't ask for
-
-## COMMON MISTAKES TO AVOID
-
-1. Wrong screw length for drywall thickness
-2. Forgetting PT bottom plate on concrete
-3. Using 1/2" on 24" OC ceilings without noting sag risk
-4. Not asking about fire separation requirements (garage walls)
-5. Assuming R-values without knowing climate zone
-6. Mixing up LF and EA
-7. Vague quantities ("1 pack") instead of calculated amounts
+## COMMUNICATION STYLE
+- CONFIDENT: Direct answers
+- PRECISE: Specific specs
+- HONEST: Flag uncertainties
+- BRIEF: Answer the question
 `;
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+
+  // ========================================
+  // SECURITY: Authenticate
+  // ========================================
+  const auth = await authenticateRequest(req);
+  
+  if (!auth.authenticated || !auth.userId) {
+    console.error('[AI Parse] Auth failed:', auth.error);
+    return new Response(
+      JSON.stringify({ error: auth.error || 'Unauthorized' }),
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const userId = auth.userId;
 
   try {
     const { message, projectContext, pendingActions, conversationHistory, isFollowUp } = await req.json();
@@ -165,26 +131,38 @@ serve(async (req) => {
       );
     }
 
-    console.log('[AI Parse] Conversation history:', conversationHistory?.length || 0, 'messages');
-
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
-    // Fetch comprehensive project data
-    let projectData = null;
-    let takeoffItems: any[] = [];
-    let laborItems: any[] = [];
-    let assumptions: any[] = [];
-    let rfis: any[] = [];
-    let userKnowledge: any[] = [];
-    let pricingData: any[] = [];
-    
-    // Initialize Supabase client once
     let supabase: ReturnType<typeof createClient> | null = null;
     if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
       supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     }
+
+    // ========================================
+    // SECURITY: Verify project ownership
+    // ========================================
+    if (projectContext?.projectId && supabase) {
+      const ownsProject = await verifyProjectOwnership(supabase, userId, projectContext.projectId);
+      if (!ownsProject) {
+        console.error('[AI Parse] Access denied: user does not own project');
+        return new Response(
+          JSON.stringify({ error: 'Access denied: you do not own this project' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    console.log('[AI Parse] Processing for user:', userId);
+
+    // Fetch project data (only for owned project)
+    let projectData = null;
+    let takeoffItems: unknown[] = [];
+    let laborItems: unknown[] = [];
+    let assumptions: unknown[] = [];
+    let rfis: unknown[] = [];
+    let userKnowledge: unknown[] = [];
     
     if (projectContext?.projectId && supabase) {
       const { data: project } = await supabase
@@ -227,48 +205,30 @@ serve(async (req) => {
       }
     }
 
-    // Load user's learned knowledge (corrections, terminology, preferences)
+    // Load user's learned knowledge (only their own)
     if (supabase) {
       const { data: knowledge } = await supabase
         .from('ai_knowledge')
         .select('category, key, value, confidence')
+        .eq('user_id', userId)
         .order('usage_count', { ascending: false })
         .limit(50);
       
       if (knowledge) userKnowledge = knowledge;
-
-      // Load cached pricing data
-      const { data: prices } = await supabase
-        .from('price_cache')
-        .select('item_name, store, price, unit')
-        .gt('expires_at', new Date().toISOString())
-        .order('scraped_at', { ascending: false })
-        .limit(100);
-      
-      if (prices) pricingData = prices;
     }
 
-    const takeoffSummary = buildTakeoffSummary(takeoffItems);
-    const laborSummary = buildLaborSummary(laborItems);
-    const projectSummary = buildProjectSummary(projectData, takeoffItems, laborItems, assumptions, rfis);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const takeoffSummary = buildTakeoffSummary(takeoffItems as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const laborSummary = buildLaborSummary(laborItems as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const projectSummary = buildProjectSummary(projectData as any, takeoffItems as any, laborItems as any, assumptions, rfis);
     
-    // Build knowledge and pricing context
     const knowledgeContext = userKnowledge.length > 0 
-      ? `## USER'S LEARNED PREFERENCES
-${userKnowledge.map((k: any) => `- ${k.category}: "${k.key}" → ${JSON.stringify(k.value)}`).join('\n')}
-When the user has taught me terminology or preferences above, I should use them.`
-      : '';
-    
-    const pricingContext = pricingData.length > 0
-      ? `## LIVE PRICING DATA (cached)
-${pricingData.slice(0, 20).map((p: any) => `- ${p.item_name}: $${p.price}/${p.unit} (${p.store})`).join('\n')}
-I can use these prices to provide unit costs. If user asks for pricing on items not cached, I should suggest using "lookup prices" command.`
+      ? `## USER'S LEARNED PREFERENCES\n${(userKnowledge as KnowledgeItem[]).map((k) => `- ${k.category}: "${k.key}" → ${JSON.stringify(k.value)}`).join('\n')}`
       : '';
 
     console.log('[AI Parse] Input:', message);
-    console.log('[AI Parse] Project:', projectData?.name);
-    console.log('[AI Parse] User knowledge items:', userKnowledge.length);
-    console.log('[AI Parse] Cached prices:', pricingData.length);
 
     if (!LOVABLE_API_KEY) {
       console.log('[AI Parse] No API key, using pattern fallback');
@@ -278,7 +238,10 @@ I can use these prices to provide unit costs. If user asks for pricing on items 
       );
     }
 
-    const systemPrompt = `You are a SENIOR CONSTRUCTION ESTIMATOR with 20+ years in the field. You speak with authority but admit uncertainty when appropriate. Veterans trust your judgment because you're honest about what you know vs. what varies by jurisdiction.
+    const systemPrompt = `You are a SENIOR CONSTRUCTION ESTIMATOR. You PROPOSE actions that the user must confirm.
+
+CRITICAL: You are PROPOSE-ONLY. You suggest actions but NEVER write directly.
+All proposed actions will be shown to the user for confirmation before execution.
 
 ${CONSTRUCTION_KNOWLEDGE}
 
@@ -293,139 +256,50 @@ ${laborSummary || 'None yet.'}
 
 ${knowledgeContext}
 
-${pricingContext}
+## PRICING RULES
+- Use price book entries when available
+- Use knowledge base historical data
+- Leave price blank if unknown (do NOT guess)
+- NEVER use web-scraped prices
 
-## SCOPE RULES: What to include automatically
-When user mentions drywall finishing → include: sheets, joint compound, tape, screws, corner bead (for outside corners)
-When user mentions framing → include: studs AND plates (top and bottom), anchors if on concrete
-When user mentions insulation → include: batt insulation only
-
-Do NOT add: electrical, plumbing, HVAC, doors, windows - unless explicitly requested.
-
-## WHEN CALCULATING
-- Use the formulas accurately - show math when asked
-- Ceiling height: assume 8' unless specified
-- Stud spacing: assume 16" OC unless specified (note if 24" OC would affect drywall thickness)
-- Basement: use PT bottom plates on concrete, specify 1/2" drywall for walls
-- Ceilings at 24" OC: recommend 5/8" drywall to prevent sag
-- Corner bead: OUTSIDE corners only × ceiling height
-
-## COMMUNICATION STYLE
-- **CONFIDENT**: Give direct answers, not wishy-washy hedging
-- **PRECISE**: "1/2 inch for walls, 5/8 inch for 24" OC ceilings" not "usually half inch"  
-- **HONEST**: If unsure, say "I'd verify with local code on this, but standard is..."
-- **NO HALLUCINATING**: Never guess at specs - flag for verification instead
-- **BRIEF**: Answer the question, don't over-explain unless asked
-- **PROFESSIONAL**: A veteran contractor should nod, not roll their eyes
-
-## ACTIONS
+## ACTIONS (proposals only)
 - takeoff.add_multiple: { items: [{ description, quantity, unit, category, unit_cost? }] }
 - takeoff.add_item: { description, quantity, unit, category, unit_cost? }
 - project.set_defaults: { markup_percent?, tax_percent?, waste_percent? }
 - takeoff.promote_drafts: { scope: 'all' }
 - export.pdf: {}
 - qa.show_issues: {}
-- assumption.add: { statement, trade?, is_exclusion? } - Use when flagging something for verification
-- learn.terminology: { term, meaning, context? } - When user corrects terminology, learn it for next time
-- learn.preference: { preference, value } - When user expresses a preference (e.g., "always use 5/8 drywall for ceilings")
-- pricing.lookup: { items: string[] } - Request live pricing lookup for specific items
+- assumption.add: { statement, trade?, is_exclusion? }
+- learn.terminology: { term, meaning, context? }
+- learn.preference: { preference, value }
 
-## SELF-LEARNING
-When a user CORRECTS you (e.g., "no, that's called X not Y" or "I always use Z for basements"):
-1. Acknowledge the correction naturally
-2. Include a learn.terminology or learn.preference action to remember it
-3. Apply the correction to the current proposal
-
-Example correction response:
-User: "We call those PT sill plates, not bottom plates"
-Your action: { "type": "learn.terminology", "params": { "term": "PT sill plate", "meaning": "pressure-treated bottom plate on concrete", "context": "basement framing" } }
-
-## PRICING
-If you have pricing data available (in LIVE PRICING DATA above), include unit_cost in items.
-If user asks for pricing on items not in cache, add a pricing.lookup action.
-
-## RESPONSE FORMAT (JSON only, no markdown)
+## RESPONSE FORMAT (JSON only)
 {
   "success": true,
   "actions": [{ "type": "takeoff.add_multiple", "params": { "items": [...] }, "confidence": 0.95 }],
   "followUpQuestions": [],
-  "message": "Brief, professional explanation"
-}
+  "message": "Brief explanation"
+}`;
 
-## FOLLOW-UP HANDLING - CRITICAL: ALWAYS UPDATE THE LIST
-
-When the user refines a previous proposal, your actions array MUST contain the COMPLETE CORRECTED list:
-
-1. **User asks to ADD something** (e.g., "add corner beads")
-   - Return COMPLETE list: all previous items PLUS new items
-
-2. **User asks to REMOVE something** (e.g., "remove the electrical")
-   - Return COMPLETE list: all previous items MINUS removed items
-
-3. **User asks to AUDIT/CHECK** (e.g., "audit materials", "check the math", "does this look right?")
-   - Review each item's calculation
-   - If you find errors → FIX THEM and return the CORRECTED complete list
-   - In your message, briefly note what you corrected (e.g., "Adjusted studs from 118 to 60 based on 70 LF")
-   - DO NOT just explain errors without fixing them
-
-4. **User asks about a missing item** (e.g., "do we have corner beads?")
-   - ADD the missing item to the list
-   - Return COMPLETE list with the new item included
-
-5. **User asks WHY about a quantity**
-   - Explain clearly in your message
-   - Still return the SAME complete list (so it stays visible)
-
-## AUDIT RESPONSE FORMAT
-When auditing, use this format in your message:
-"Reviewed calculations:
-✓ Studs: 60 EA (70 LF × 0.75 + corners)
-✓ Plates: 9 bottom, 18 top
-⚠️ Adjusted drywall from 48 to 40 sheets
-✓ Corner bead: 24 LF added
-All items look correct now."
-
-**CRITICAL: The actions array must ALWAYS contain the full corrected list. Never return empty actions or just new items.**`;
-
-    // Build user prompt based on context
     let userPrompt = `"${message}"`;
     
     if (isFollowUp && pendingActions) {
-      userPrompt = `Current pending proposal (these items are already in the list):
-${pendingActions}
-
-User says: "${message}"
-
-CRITICAL RULES FOR YOUR RESPONSE:
-1. Your actions array MUST contain the COMPLETE list of ALL items (existing + any additions/changes)
-2. If user asks to ADD something → include ALL previous items PLUS the new item(s)
-3. If user asks to REMOVE something → include ALL previous items MINUS the removed item(s)
-4. If user asks a question about something missing → ADD it to the list and return complete list
-5. NEVER return just the new item alone - always return the full accumulated list
-
-Example: If current list has 8 items and user says "add corner beads", your actions should have 9 items total.`;
-    } else {
-      userPrompt += `\n\nCalculate quantities using the formulas. Be accurate and complete.`;
+      userPrompt = `Current pending proposal:\n${pendingActions}\n\nUser says: "${message}"\n\nReturn COMPLETE updated list.`;
     }
 
-    console.log('[AI Parse] Is follow-up:', isFollowUp);
-
-    // Build messages array with conversation history for context
     const aiMessages: Array<{ role: string; content: string }> = [
       { role: 'system', content: systemPrompt }
     ];
 
-    // Add conversation history if available (for context)
-    if (conversationHistory && Array.isArray(conversationHistory) && conversationHistory.length > 0) {
-      for (const msg of conversationHistory.slice(-8)) { // Last 8 messages for context
+    if (conversationHistory && Array.isArray(conversationHistory)) {
+      for (const msg of conversationHistory.slice(-8)) {
         aiMessages.push({
           role: msg.role === 'user' ? 'user' : 'assistant',
-          content: msg.content.slice(0, 500) // Truncate long messages
+          content: msg.content.slice(0, 500)
         });
       }
     }
 
-    // Add current user message
     aiMessages.push({ role: 'user', content: userPrompt });
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -466,8 +340,6 @@ Example: If current list has 8 items and user says "add corner beads", your acti
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content;
     
-    console.log('[AI Parse] Raw response:', content);
-
     if (!content) {
       return new Response(
         JSON.stringify(parseWithPatterns(message)),
@@ -479,13 +351,11 @@ Example: If current list has 8 items and user says "add corner beads", your acti
     try {
       let jsonStr = content.trim();
       
-      // Remove markdown code blocks
       if (jsonStr.startsWith('```json')) jsonStr = jsonStr.slice(7);
       else if (jsonStr.startsWith('```')) jsonStr = jsonStr.slice(3);
       if (jsonStr.endsWith('```')) jsonStr = jsonStr.slice(0, -3);
       jsonStr = jsonStr.trim();
       
-      // Try to extract JSON from mixed content (AI sometimes adds text before/after JSON)
       if (!jsonStr.startsWith('{')) {
         const jsonMatch = jsonStr.match(/\{[\s\S]*"success"\s*:\s*(true|false)[\s\S]*\}/);
         if (jsonMatch) {
@@ -495,27 +365,21 @@ Example: If current list has 8 items and user says "add corner beads", your acti
       
       parsed = JSON.parse(jsonStr);
       
-      // Validate the parsed object has required fields
       if (typeof parsed.success !== 'boolean') {
         throw new Error('Invalid response structure');
       }
-    } catch (e) {
-      console.error('[AI Parse] JSON parse failed:', e);
-      console.log('[AI Parse] Raw content was:', content.slice(0, 500));
-      
-      // Return the AI's text response as a message so user can still see it
+    } catch {
       return new Response(
         JSON.stringify({
           success: true,
           actions: [],
           followUpQuestions: [],
-          message: content.slice(0, 1500), // Show more of the AI's response
+          message: content.slice(0, 1500),
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('[AI Parse] Success:', parsed);
     return new Response(
       JSON.stringify(parsed),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -530,10 +394,32 @@ Example: If current list has 8 items and user says "add corner beads", your acti
   }
 });
 
-function buildTakeoffSummary(items: any[]): string {
+// Types for helpers
+interface TakeoffItem {
+  category?: string;
+  description: string;
+  quantity: number;
+  unit: string;
+  extended_cost?: number;
+}
+
+interface LaborItem {
+  task_name: string;
+  quantity: number;
+  unit: string;
+  extended?: number;
+}
+
+interface KnowledgeItem {
+  category: string;
+  key: string;
+  value: unknown;
+}
+
+function buildTakeoffSummary(items: TakeoffItem[]): string {
   if (!items || items.length === 0) return '';
   
-  const byCategory: Record<string, any[]> = {};
+  const byCategory: Record<string, TakeoffItem[]> = {};
   let totalCost = 0;
   
   for (const item of items) {
@@ -556,7 +442,7 @@ function buildTakeoffSummary(items: any[]): string {
   return summary;
 }
 
-function buildLaborSummary(items: any[]): string {
+function buildLaborSummary(items: LaborItem[]): string {
   if (!items || items.length === 0) return '';
   
   let total = 0;
@@ -570,7 +456,14 @@ function buildLaborSummary(items: any[]): string {
   return summary + `Total: $${total.toLocaleString()}`;
 }
 
-function buildProjectSummary(project: any, takeoff: any[], labor: any[], assumptions: any[], rfis: any[]): string {
+interface ProjectData {
+  name: string;
+  markup_percent?: number;
+  tax_percent?: number;
+  waste_percent?: number;
+}
+
+function buildProjectSummary(project: ProjectData | null, takeoff: TakeoffItem[], labor: LaborItem[], _assumptions: unknown[], _rfis: unknown[]): string {
   if (!project) return 'No project selected.';
   
   const takeoffTotal = takeoff.reduce((sum, i) => sum + (i.extended_cost || 0), 0);
@@ -622,7 +515,7 @@ function parseWithPatterns(message: string): ParseResult {
       success: false,
       actions: [],
       followUpQuestions: [],
-      message: "Give me dimensions (e.g., '20×30 basement room') or a direct command (e.g., 'set markup to 20%').",
+      message: "Give me dimensions (e.g., '20×30 basement room') or a direct command.",
     };
   }
 
