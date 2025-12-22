@@ -119,7 +119,8 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
   const [itemPriceStatus, setItemPriceStatus] = useState<Record<string, ItemPriceStatus>>({});
   const [loadingPriceFor, setLoadingPriceFor] = useState<string | null>(null);
   const [priceLookupItem, setPriceLookupItem] = useState<TakeoffItem | null>(null);
-
+  const [isBulkPricing, setIsBulkPricing] = useState(false);
+  const [bulkPriceProgress, setBulkPriceProgress] = useState({ done: 0, total: 0 });
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['takeoff-items', projectId],
     queryFn: async () => {
@@ -241,6 +242,80 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
     } finally {
       setLoadingPriceFor(null);
     }
+  };
+
+  // Bulk price lookup for all items without prices
+  const refreshAllPrices = async () => {
+    const itemsNeedingPrice = items.filter(item => 
+      !item.draft && (!item.unit_cost || item.unit_cost === 0) && 
+      item.description !== 'New Item'
+    );
+    
+    if (itemsNeedingPrice.length === 0) {
+      toast({ title: 'No items need pricing', description: 'All items already have prices set' });
+      return;
+    }
+
+    setIsBulkPricing(true);
+    setBulkPriceProgress({ done: 0, total: itemsNeedingPrice.length });
+
+    let successCount = 0;
+    
+    // Process in batches of 3 to avoid rate limits
+    for (let i = 0; i < itemsNeedingPrice.length; i += 3) {
+      const batch = itemsNeedingPrice.slice(i, i + 3);
+      
+      try {
+        const { data, error } = await supabase.functions.invoke('price-lookup', {
+          body: { 
+            items: batch.map(item => item.description),
+            zipCode: projectData?.zip_code || undefined,
+            forceRefresh: true, // Trigger live scraping
+          }
+        });
+        
+        if (!error && data.success && data.results) {
+          for (const item of batch) {
+            const results = data.results[item.description] as PriceResult[] | undefined;
+            if (results && results.length > 0) {
+              const best = results.find(r => r.price !== null);
+              if (best && best.price) {
+                // Auto-apply the best price
+                await supabase
+                  .from('takeoff_items')
+                  .update({ 
+                    unit_cost: best.price, 
+                    vendor: best.store || 'Store Lookup' 
+                  })
+                  .eq('id', item.id);
+                
+                setItemPriceStatus(prev => ({
+                  ...prev,
+                  [item.id]: {
+                    status: best.status,
+                    price: best.price,
+                    store: best.store,
+                  }
+                }));
+                successCount++;
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[Bulk Price] Error:', error);
+      }
+      
+      setBulkPriceProgress({ done: Math.min(i + 3, itemsNeedingPrice.length), total: itemsNeedingPrice.length });
+    }
+
+    setIsBulkPricing(false);
+    queryClient.invalidateQueries({ queryKey: ['takeoff-items', projectId] });
+    
+    toast({ 
+      title: 'Price lookup complete', 
+      description: `Updated ${successCount} of ${itemsNeedingPrice.length} items` 
+    });
   };
 
   // Apply price from lookup
@@ -1047,7 +1122,51 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
       {activeCount > 0 && (
         <Card>
           <CardContent className="pt-6">
-            <div className="flex justify-end">
+            <div className="flex flex-col sm:flex-row justify-between gap-4">
+              {/* Price Action Section */}
+              <div className="flex flex-col gap-3">
+                {(() => {
+                  const itemsNeedingPrice = items.filter(item => 
+                    !item.draft && (!item.unit_cost || item.unit_cost === 0) && 
+                    item.description !== 'New Item'
+                  );
+                  
+                  if (itemsNeedingPrice.length > 0) {
+                    return (
+                      <>
+                        <div className="flex items-center gap-2 text-sm text-warning">
+                          <HelpCircle className="h-4 w-4" />
+                          <span>{itemsNeedingPrice.length} items need pricing</span>
+                        </div>
+                        <Button
+                          onClick={refreshAllPrices}
+                          disabled={isBulkPricing}
+                          className="gap-2"
+                          variant="default"
+                        >
+                          {isBulkPricing ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Getting Prices... ({bulkPriceProgress.done}/{bulkPriceProgress.total})
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="h-4 w-4" />
+                              Get All Prices
+                            </>
+                          )}
+                        </Button>
+                        <p className="text-xs text-muted-foreground max-w-[200px]">
+                          Fetches live prices from Home Depot & Lowe's
+                        </p>
+                      </>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+              
+              {/* Totals Section */}
               <div className="w-64 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Active Items</span>

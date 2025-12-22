@@ -108,6 +108,7 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<'chat' | 'history'>('chat');
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome',
@@ -124,10 +125,118 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
   const [source, setSource] = useState<'text' | 'voice'>('text');
   const [showMoneyConfirm, setShowMoneyConfirm] = useState(false);
   const [itemsDrawerOpen, setItemsDrawerOpen] = useState(false);
+  const [isLoadingConversation, setIsLoadingConversation] = useState(true);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Load existing conversation for this project
+  useEffect(() => {
+    const loadConversation = async () => {
+      if (!user || !projectId) {
+        setIsLoadingConversation(false);
+        return;
+      }
+
+      try {
+        // Find active conversation for this project
+        const { data: existingConv, error: fetchError } = await supabase
+          .from('ai_conversations')
+          .select('id, messages')
+          .eq('project_id', projectId)
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .order('last_message_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (fetchError) {
+          console.error('[CommandCenter] Error loading conversation:', fetchError);
+          setIsLoadingConversation(false);
+          return;
+        }
+
+        if (existingConv && existingConv.messages) {
+          // Restore messages from conversation
+          const savedMessages = existingConv.messages as unknown as Message[];
+          if (Array.isArray(savedMessages) && savedMessages.length > 0) {
+            // Convert timestamps back to Date objects
+            const restoredMessages = savedMessages.map(m => ({
+              ...m,
+              timestamp: new Date(m.timestamp)
+            }));
+            setMessages(restoredMessages);
+            setConversationId(existingConv.id);
+          }
+        }
+      } catch (err) {
+        console.error('[CommandCenter] Exception loading conversation:', err);
+      } finally {
+        setIsLoadingConversation(false);
+      }
+    };
+
+    loadConversation();
+  }, [user, projectId]);
+
+  // Save conversation when messages change
+  useEffect(() => {
+    const saveConversation = async () => {
+      if (!user || !projectId || messages.length <= 1 || isLoadingConversation) return;
+
+      // Convert messages to a JSON-serializable format
+      const messagesToSave = messages.map(m => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        timestamp: m.timestamp.toISOString(),
+        logId: m.logId,
+        confidence: m.confidence,
+        reasoning: m.reasoning,
+        decisionId: m.decisionId,
+      }));
+
+      try {
+        if (conversationId) {
+          // Update existing conversation
+          await supabase
+            .from('ai_conversations')
+            .update({
+              messages: messagesToSave,
+              message_count: messages.length,
+              last_message_at: new Date().toISOString(),
+            })
+            .eq('id', conversationId);
+        } else {
+          // Create new conversation
+          const { data: newConv, error } = await supabase
+            .from('ai_conversations')
+            .insert([{
+              project_id: projectId,
+              user_id: user.id,
+              messages: messagesToSave,
+              message_count: messages.length,
+              status: 'active',
+              title: 'Command Center Session',
+              last_message_at: new Date().toISOString(),
+            }])
+            .select('id')
+            .single();
+
+          if (!error && newConv) {
+            setConversationId(newConv.id);
+          }
+        }
+      } catch (err) {
+        console.error('[CommandCenter] Error saving conversation:', err);
+      }
+    };
+
+    // Debounce the save
+    const timeout = setTimeout(saveConversation, 1000);
+    return () => clearTimeout(timeout);
+  }, [messages, user, projectId, conversationId, isLoadingConversation]);
 
   // Voice input with enhanced status
   const { 
