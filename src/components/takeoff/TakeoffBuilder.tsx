@@ -14,7 +14,8 @@ import {
   RefreshCw,
   Check,
   Clock,
-  HelpCircle
+  HelpCircle,
+  ExternalLink
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -73,6 +74,7 @@ interface TakeoffItem {
   unit_cost: number | null;
   extended_cost: number | null;
   vendor: string | null;
+  product_url: string | null;
   phase: string | null;
   notes: string | null;
   sort_order: number | null;
@@ -318,11 +320,15 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
     });
   };
 
-  // Apply price from lookup
-  const applyPrice = (itemId: string, price: number, vendor: string) => {
+  // Apply price from lookup - now includes product URL
+  const applyPrice = (itemId: string, price: number, vendor: string, productUrl?: string) => {
     updateItemMutation.mutate({ 
       id: itemId, 
-      updates: { unit_cost: price, vendor } 
+      updates: { 
+        unit_cost: price, 
+        vendor,
+        product_url: productUrl || null 
+      } 
     });
     
     // Mark as verified since user confirmed
@@ -829,7 +835,7 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                         <Button
                           size="sm"
                           onClick={() => {
-                            applyPrice(priceLookupItem.id, result.price!, result.store || 'Cache');
+                            applyPrice(priceLookupItem.id, result.price!, result.store || 'Cache', result.productUrl);
                             setPriceLookupItem(null);
                           }}
                         >
@@ -1083,14 +1089,27 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                                   {item.extended_cost ? formatCurrency(item.extended_cost) : '—'}
                                 </TableCell>
                                 <TableCell>
-                                  <Input
-                                    value={item.vendor || ''}
-                                    onChange={(e) =>
-                                      handleInputChange(item.id, 'vendor', e.target.value)
-                                    }
-                                    className="h-8"
-                                    placeholder="..."
-                                  />
+                                  <div className="flex items-center gap-1">
+                                    <Input
+                                      value={item.vendor || ''}
+                                      onChange={(e) =>
+                                        handleInputChange(item.id, 'vendor', e.target.value)
+                                      }
+                                      className="h-8 flex-1"
+                                      placeholder="..."
+                                    />
+                                    {item.product_url && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => window.open(item.product_url!, '_blank')}
+                                        className="h-8 w-8 shrink-0"
+                                        title="Open product page"
+                                      >
+                                        <ExternalLink className="h-3.5 w-3.5" />
+                                      </Button>
+                                    )}
+                                  </div>
                                 </TableCell>
                                 <TableCell>
                                   <Button

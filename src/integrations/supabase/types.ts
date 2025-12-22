@@ -1869,6 +1869,7 @@ export type Database = {
           packages: number | null
           phase: string | null
           plan_file_id: string | null
+          product_url: string | null
           project_id: string
           quantity: number
           sort_order: number | null
@@ -1891,6 +1892,7 @@ export type Database = {
           packages?: number | null
           phase?: string | null
           plan_file_id?: string | null
+          product_url?: string | null
           project_id: string
           quantity?: number
           sort_order?: number | null
@@ -1913,6 +1915,7 @@ export type Database = {
           packages?: number | null
           phase?: string | null
           plan_file_id?: string | null
+          product_url?: string | null
           project_id?: string
           quantity?: number
           sort_order?: number | null
