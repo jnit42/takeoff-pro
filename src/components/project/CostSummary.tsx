@@ -118,26 +118,26 @@ export function CostSummary({ projectId, project }: CostSummaryProps) {
 
   return (
     <div className="space-y-4">
-      {/* Final Bid Card */}
+      {/* Final Bid Card - Mobile optimized */}
       <Card className="bg-accent/10 border-accent/30">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardDescription className="flex items-center gap-2">
-                <DollarSign className="h-4 w-4" />
+        <CardHeader className="p-4 sm:pb-3 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="min-w-0">
+              <CardDescription className="flex items-center gap-2 text-sm">
+                <DollarSign className="h-4 w-4 shrink-0" />
                 Final Bid Price
               </CardDescription>
-              <CardTitle className="text-4xl font-mono text-accent">
+              <CardTitle className="text-3xl sm:text-4xl font-mono text-accent truncate">
                 {formatCurrency(finalBidPrice)}
               </CardTitle>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <Switch
                 id="include-drafts"
                 checked={includeDrafts}
                 onCheckedChange={setIncludeDrafts}
               />
-              <Label htmlFor="include-drafts" className="text-sm">Include Drafts</Label>
+              <Label htmlFor="include-drafts" className="text-sm whitespace-nowrap">Include Drafts</Label>
             </div>
           </div>
         </CardHeader>
@@ -146,14 +146,14 @@ export function CostSummary({ projectId, project }: CostSummaryProps) {
       {/* Missing Cost Warning */}
       {missingCostItems.length > 0 && (
         <Card className="border-warning/50 bg-warning/5">
-          <CardContent className="py-3">
+          <CardContent className="p-3 sm:py-3">
             <div className="flex items-center gap-2 text-warning">
-              <AlertTriangle className="h-4 w-4" />
+              <AlertTriangle className="h-4 w-4 shrink-0" />
               <span className="text-sm font-medium">
                 {missingCostItems.length} item{missingCostItems.length !== 1 ? 's' : ''} missing unit cost
               </span>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
               {missingCostItems.slice(0, 3).map(i => i.description).join(', ')}
               {missingCostItems.length > 3 && ` + ${missingCostItems.length - 3} more`}
             </p>
@@ -163,31 +163,31 @@ export function CostSummary({ projectId, project }: CostSummaryProps) {
 
       {/* Cost Breakdown */}
       <Card>
-        <CardHeader className="pb-3">
+        <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
           <CardTitle className="text-lg">Cost Breakdown</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0 space-y-3">
           {/* Materials Section */}
           <Collapsible open={expandMaterials} onOpenChange={setExpandMaterials}>
             <CollapsibleTrigger className="w-full">
               <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors">
-                <div className="flex items-center gap-2">
-                  {expandMaterials ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                <div className="flex items-center gap-2 min-w-0">
+                  {expandMaterials ? <ChevronUp className="h-4 w-4 shrink-0" /> : <ChevronDown className="h-4 w-4 shrink-0" />}
                   <span className="font-medium">Materials</span>
-                  <Badge variant="secondary">{filteredItems.length} items</Badge>
+                  <Badge variant="secondary" className="text-xs">{filteredItems.length} items</Badge>
                 </div>
-                <span className="font-mono font-semibold">{formatCurrency(materialsTotal)}</span>
+                <span className="font-mono font-semibold text-sm sm:text-base shrink-0 ml-2">{formatCurrency(materialsTotal)}</span>
               </div>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <div className="pl-6 pt-2 space-y-2">
+              <div className="pl-4 sm:pl-6 pt-2 space-y-2">
                 {Object.entries(categoryTotals)
                   .filter(([_, total]) => total > 0)
                   .sort((a, b) => b[1] - a[1])
                   .map(([category, total]) => (
                     <div key={category} className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">{category}</span>
-                      <span className="font-mono">{formatCurrency(total)}</span>
+                      <span className="text-muted-foreground truncate mr-2">{category}</span>
+                      <span className="font-mono shrink-0">{formatCurrency(total)}</span>
                     </div>
                   ))}
                 <div className="border-t pt-2 mt-2 space-y-1">
@@ -212,23 +212,23 @@ export function CostSummary({ projectId, project }: CostSummaryProps) {
           <Collapsible open={expandLabor} onOpenChange={setExpandLabor}>
             <CollapsibleTrigger className="w-full">
               <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors">
-                <div className="flex items-center gap-2">
-                  {expandLabor ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                <div className="flex items-center gap-2 min-w-0">
+                  {expandLabor ? <ChevronUp className="h-4 w-4 shrink-0" /> : <ChevronDown className="h-4 w-4 shrink-0" />}
                   <span className="font-medium">Labor</span>
-                  <Badge variant="secondary">
+                  <Badge variant="secondary" className="text-xs">
                     {laborEstimates.reduce((sum, e) => sum + (e.labor_line_items?.length || 0), 0)} tasks
                   </Badge>
                 </div>
-                <span className="font-mono font-semibold">{formatCurrency(laborTotal)}</span>
+                <span className="font-mono font-semibold text-sm sm:text-base shrink-0 ml-2">{formatCurrency(laborTotal)}</span>
               </div>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <div className="pl-6 pt-2 space-y-2">
+              <div className="pl-4 sm:pl-6 pt-2 space-y-2">
                 {laborEstimates.map((est) => (
                   est.labor_line_items?.map((item) => (
                     <div key={item.id} className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">{item.task_name}</span>
-                      <span className="font-mono">{formatCurrency(item.extended || 0)}</span>
+                      <span className="text-muted-foreground truncate mr-2">{item.task_name}</span>
+                      <span className="font-mono shrink-0">{formatCurrency(item.extended || 0)}</span>
                     </div>
                   ))
                 ))}
@@ -264,7 +264,7 @@ export function CostSummary({ projectId, project }: CostSummaryProps) {
               <span className="text-muted-foreground">Total with Markup</span>
               <span className="font-mono">{formatCurrency(totalWithMarkup)}</span>
             </div>
-            <div className="flex justify-between font-semibold text-lg border-t pt-2">
+            <div className="flex justify-between font-semibold text-base sm:text-lg border-t pt-2">
               <span>Final Bid (rounded)</span>
               <span className="font-mono text-accent">{formatCurrency(finalBidPrice)}</span>
             </div>

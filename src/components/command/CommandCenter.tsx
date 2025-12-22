@@ -1,6 +1,6 @@
 /**
  * Command Center - Voice/Text control panel for the app
- * Enhanced with action log viewer, better voice status, extensible rules
+ * Mobile-first redesign with proper layout and scrolling
  */
 
 import { useState, useRef, useEffect } from 'react';
@@ -20,6 +20,8 @@ import {
   History,
   HelpCircle,
   AlertTriangle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,6 +38,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useVoiceInput, type VoiceStatus } from '@/hooks/useVoiceInput';
@@ -111,6 +118,7 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
   const [isExecuting, setIsExecuting] = useState(false);
   const [source, setSource] = useState<'text' | 'voice'>('text');
   const [showMoneyConfirm, setShowMoneyConfirm] = useState(false);
+  const [pendingExpanded, setPendingExpanded] = useState(true);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -130,7 +138,6 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
       setSource('voice');
     },
     onInterim: (interim) => {
-      // Show live transcription in input while speaking
       if (interim) {
         setInputValue(interim);
       }
@@ -539,7 +546,7 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
 
   return (
     <Card className={cn('flex flex-col h-full overflow-hidden', className)}>
-      <CardHeader className="pb-2 px-3 sm:px-6 flex-shrink-0">
+      <CardHeader className="pb-2 px-3 sm:px-6 flex-shrink-0 border-b">
         <CardTitle className="flex items-center justify-between text-base sm:text-lg">
           <div className="flex items-center gap-2">
             <Terminal className="h-4 w-4 sm:h-5 sm:w-5 text-accent" />
@@ -553,7 +560,7 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
       </CardHeader>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'chat' | 'history')} className="flex-1 flex flex-col min-h-0">
-        <TabsList className="mx-3 grid grid-cols-2 flex-shrink-0">
+        <TabsList className="mx-3 mt-2 grid grid-cols-2 flex-shrink-0">
           <TabsTrigger value="chat" className="gap-1.5 text-xs">
             <Terminal className="h-3 w-3" />
             Commands
@@ -564,211 +571,223 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
           </TabsTrigger>
         </TabsList>
 
-        <CardContent className="flex-1 flex flex-col gap-2 sm:gap-3 p-3 pt-2 min-h-0 overflow-hidden">
-          <TabsContent value="chat" className="flex-1 flex flex-col gap-2 sm:gap-3 mt-0 data-[state=inactive]:hidden min-h-0 overflow-hidden">
-            {/* Project Warning */}
-            {!projectId && (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-warning/10 border border-warning/30 text-warning flex-shrink-0">
-                <AlertTriangle className="h-3 w-3 shrink-0" />
-                <span>No project selected. Some commands require a project context.</span>
-              </div>
-            )}
+        <CardContent className="flex-1 flex flex-col p-0 min-h-0 overflow-hidden">
+          <TabsContent value="chat" className="flex-1 flex flex-col mt-0 data-[state=inactive]:hidden min-h-0 overflow-hidden m-0">
+            {/* Main chat area - flex column layout */}
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              {/* Project Warning */}
+              {!projectId && (
+                <div className="flex items-center gap-2 px-3 py-2 mx-3 mt-3 rounded-lg text-xs bg-warning/10 border border-warning/30 text-warning flex-shrink-0">
+                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                  <span>No project selected. Some commands require a project context.</span>
+                </div>
+              )}
 
-            {/* Messages - scrollable area */}
-            <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
-              <div className="space-y-3 pr-2">
-                {messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={cn(
-                      'rounded-lg p-3 text-sm break-words animate-fade-in',
-                      msg.role === 'user' && 'bg-primary/10 ml-4 sm:ml-8 border border-primary/20',
-                      msg.role === 'system' && 'bg-muted/60 border border-border/50',
-                      msg.role === 'preview' && 'bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800',
-                      msg.role === 'suggestion' && 'bg-accent/5 border border-accent/20'
-                    )}
-                  >
-                    <div className="flex items-start gap-2">
-                      {msg.role === 'preview' && <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />}
-                      {msg.role === 'suggestion' && <HelpCircle className="h-4 w-4 text-accent shrink-0 mt-0.5" />}
-                      {msg.role === 'system' && msg.results?.some(r => !r.success) && (
-                        <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+              {/* Messages - scrollable area - takes remaining space */}
+              <ScrollArea className="flex-1 min-h-0 px-3" ref={scrollRef}>
+                <div className="space-y-3 py-3">
+                  {messages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className={cn(
+                        'rounded-lg p-3 text-sm break-words animate-fade-in',
+                        msg.role === 'user' && 'bg-primary/10 ml-4 sm:ml-8 border border-primary/20',
+                        msg.role === 'system' && 'bg-muted/60 border border-border/50',
+                        msg.role === 'preview' && 'bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800',
+                        msg.role === 'suggestion' && 'bg-accent/5 border border-accent/20'
                       )}
-                      <div className="flex-1 min-w-0">
-                        {/* For preview messages with material items, show structured list */}
-                        {msg.role === 'preview' && msg.actions ? (
-                          <div className="space-y-3">
-                            <p className="text-sm text-amber-800 dark:text-amber-200 font-medium">
-                              {msg.content.split('\n')[0]}
-                            </p>
-                            {/* Material list will be shown in pending panel below */}
-                            <p className="text-xs text-amber-600 dark:text-amber-400">
-                              Review items below. Ask questions or say "confirm" when ready.
-                            </p>
-                          </div>
-                        ) : (
-                          <p className="whitespace-pre-wrap break-words leading-relaxed">{msg.content}</p>
+                    >
+                      <div className="flex items-start gap-2">
+                        {msg.role === 'preview' && <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />}
+                        {msg.role === 'suggestion' && <HelpCircle className="h-4 w-4 text-accent shrink-0 mt-0.5" />}
+                        {msg.role === 'system' && msg.results?.some(r => !r.success) && (
+                          <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
                         )}
-                        {/* Clickable suggestions */}
-                        {msg.suggestions && msg.suggestions.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 mt-2">
-                            {msg.suggestions.map((s, idx) => (
-                              <Badge
-                                key={idx}
-                                variant="outline"
-                                className="cursor-pointer hover:bg-accent/20 transition-colors text-xs"
-                                onClick={() => handleSuggestionClick(s.command)}
-                              >
-                                {s.label}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
+                        <div className="flex-1 min-w-0">
+                          {/* For preview messages with material items, show structured list */}
+                          {msg.role === 'preview' && msg.actions ? (
+                            <div className="space-y-2">
+                              <p className="text-sm text-amber-800 dark:text-amber-200 font-medium">
+                                {msg.content.split('\n')[0]}
+                              </p>
+                              <p className="text-xs text-amber-600 dark:text-amber-400">
+                                Review items below. Ask questions or say "confirm" when ready.
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="whitespace-pre-wrap break-words leading-relaxed">{msg.content}</p>
+                          )}
+                          {/* Clickable suggestions */}
+                          {msg.suggestions && msg.suggestions.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mt-2">
+                              {msg.suggestions.map((s, idx) => (
+                                <Badge
+                                  key={idx}
+                                  variant="outline"
+                                  className="cursor-pointer hover:bg-accent/20 transition-colors text-xs"
+                                  onClick={() => handleSuggestionClick(s.command)}
+                                >
+                                  {s.label}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-
-            {/* Pending actions panel - expandable with material list */}
-            {pendingActions && (
-              <div className="rounded-xl bg-gradient-to-b from-amber-50 to-amber-100/50 dark:from-amber-950/40 dark:to-amber-900/20 border border-amber-200 dark:border-amber-800 shadow-sm overflow-hidden flex-shrink-0">
-                {/* Header with count and actions */}
-                <div className="flex items-center justify-between gap-2 px-3 sm:px-4 py-2.5 bg-amber-100/80 dark:bg-amber-900/40 border-b border-amber-200 dark:border-amber-700">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-white text-xs font-bold">
-                      {getPendingItemCount(pendingActions)}
-                    </div>
-                    <span className="text-sm text-amber-800 dark:text-amber-200 font-medium">
-                      Items Ready
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={() => handleConfirmActions()}
-                      disabled={isExecuting}
-                      className="h-8 px-3 sm:px-4 text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
-                    >
-                      {isExecuting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 sm:mr-1" />}
-                      <span className="hidden sm:inline">Confirm</span>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleCancelActions}
-                      disabled={isExecuting}
-                      className="h-8 w-8 p-0 text-amber-600 dark:text-amber-400 hover:text-amber-800 hover:bg-amber-200/50 rounded-full"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  ))}
                 </div>
-                
-                {/* Material list - scrollable and editable */}
-                {pendingMaterialItems.length > 0 && (
-                  <div className="max-h-48 sm:max-h-64 overflow-y-auto p-2.5 scrollbar-thin">
-                    <MaterialList 
-                      items={pendingMaterialItems}
-                      onUpdate={handleUpdatePendingItem}
-                      onRemove={handleRemovePendingItem}
-                      editable={true}
-                    />
+              </ScrollArea>
+
+              {/* Bottom section - fixed at bottom */}
+              <div className="flex-shrink-0 border-t bg-background">
+                {/* Pending actions panel - collapsible */}
+                {pendingActions && (
+                  <Collapsible open={pendingExpanded} onOpenChange={setPendingExpanded}>
+                    <div className="border-b border-amber-200 dark:border-amber-800 bg-gradient-to-b from-amber-50 to-amber-100/50 dark:from-amber-950/40 dark:to-amber-900/20">
+                      {/* Header with count and actions - always visible */}
+                      <CollapsibleTrigger asChild>
+                        <button className="w-full flex items-center justify-between gap-2 px-3 py-2.5 hover:bg-amber-100/50 dark:hover:bg-amber-900/30 transition-colors">
+                          <div className="flex items-center gap-2">
+                            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-white text-xs font-bold">
+                              {getPendingItemCount(pendingActions)}
+                            </div>
+                            <span className="text-sm text-amber-800 dark:text-amber-200 font-medium">
+                              Items Ready
+                            </span>
+                            {pendingExpanded ? (
+                              <ChevronUp className="h-4 w-4 text-amber-600" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4 text-amber-600" />
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={() => handleConfirmActions()}
+                              disabled={isExecuting}
+                              className="h-8 px-3 text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
+                            >
+                              {isExecuting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 sm:mr-1" />}
+                              <span className="hidden sm:inline">Confirm</span>
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={handleCancelActions}
+                              disabled={isExecuting}
+                              className="h-8 w-8 p-0 text-amber-600 dark:text-amber-400 hover:text-amber-800 hover:bg-amber-200/50 rounded-full"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </button>
+                      </CollapsibleTrigger>
+                      
+                      {/* Material list - scrollable and editable */}
+                      <CollapsibleContent>
+                        {pendingMaterialItems.length > 0 && (
+                          <div className="max-h-40 overflow-y-auto p-2.5 border-t border-amber-200/50 dark:border-amber-800/50">
+                            <MaterialList 
+                              items={pendingMaterialItems}
+                              onUpdate={handleUpdatePendingItem}
+                              onRemove={handleRemovePendingItem}
+                              editable={true}
+                            />
+                          </div>
+                        )}
+                        {/* Footer hint */}
+                        <div className="px-3 py-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50/50 dark:bg-amber-950/30 border-t border-amber-200/50 dark:border-amber-800/50">
+                          💬 Type to add more items, tap to edit qty
+                        </div>
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
+                )}
+
+                {/* Quick Commands */}
+                <div className="flex gap-1.5 overflow-x-auto p-3 pb-2 scrollbar-none">
+                  {QUICK_COMMANDS.map((qc) => (
+                    <Badge
+                      key={qc.label}
+                      variant="secondary"
+                      className="cursor-pointer hover:bg-accent/20 transition-colors text-xs whitespace-nowrap flex-shrink-0"
+                      onClick={() => handleSuggestionClick(qc.command)}
+                    >
+                      {qc.label}
+                    </Badge>
+                  ))}
+                </div>
+
+                {/* Voice Status */}
+                {voiceSupported && voiceStatus !== 'idle' && (
+                  <div className={cn(
+                    'flex items-center gap-2 px-3 py-1.5 mx-3 mb-2 rounded-lg text-xs',
+                    voiceStatus === 'listening' && 'bg-green-500/10 text-green-600 border border-green-200 dark:border-green-800',
+                    voiceStatus === 'processing' && 'bg-yellow-500/10 text-yellow-600 border border-yellow-200 dark:border-yellow-800',
+                    voiceStatus === 'error' && 'bg-destructive/10 text-destructive border border-destructive/20',
+                    voiceStatus === 'permission-denied' && 'bg-destructive/10 text-destructive border border-destructive/20',
+                  )}>
+                    <div className={cn('h-2 w-2 rounded-full', voiceConfig.bgColor, voiceConfig.pulse && 'animate-pulse')} />
+                    <span>{voiceConfig.message}</span>
                   </div>
                 )}
-                
-                {/* Footer hint */}
-                <div className="px-3 py-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50/50 dark:bg-amber-950/30 border-t border-amber-200/50 dark:border-amber-800/50">
-                  💬 Type to add more items, tap to edit qty, or "confirm" when ready
-                </div>
-              </div>
-            )}
 
-            {/* Quick Commands - horizontal scroll on mobile */}
-            <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin flex-shrink-0">
-              {QUICK_COMMANDS.map((qc) => (
-                <Badge
-                  key={qc.label}
-                  variant="secondary"
-                  className="cursor-pointer hover:bg-accent/20 transition-colors text-xs whitespace-nowrap flex-shrink-0"
-                  onClick={() => handleSuggestionClick(qc.command)}
-                >
-                  {qc.label}
-                </Badge>
-              ))}
-            </div>
-
-            {/* Voice Status - compact */}
-            {voiceSupported && voiceStatus !== 'idle' && (
-              <div className={cn(
-                'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs flex-shrink-0',
-                voiceStatus === 'listening' && 'bg-green-500/10 text-green-600 border border-green-200 dark:border-green-800',
-                voiceStatus === 'processing' && 'bg-yellow-500/10 text-yellow-600 border border-yellow-200 dark:border-yellow-800',
-                voiceStatus === 'error' && 'bg-destructive/10 text-destructive border border-destructive/20',
-                voiceStatus === 'permission-denied' && 'bg-destructive/10 text-destructive border border-destructive/20',
-              )}>
-                <div className={cn('h-2 w-2 rounded-full', voiceConfig.bgColor, voiceConfig.pulse && 'animate-pulse')} />
-                <span>{voiceConfig.message}</span>
-              </div>
-            )}
-
-            {/* Input area - mobile optimized */}
-            <div className="border-t border-border/50 pt-3 mt-auto flex-shrink-0 bg-background/80">
-              <form onSubmit={handleSubmit} className="flex items-end gap-2">
-                <div className="flex-1 relative">
-                  <textarea
-                    ref={inputRef}
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSubmit();
-                      }
-                    }}
-                    placeholder={projectId ? "Type or speak..." : "Select a project..."}
-                    className="w-full min-h-[44px] max-h-[100px] overflow-y-auto resize-none rounded-xl border border-input bg-background px-3 sm:px-4 py-3 text-base placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
-                    disabled={isExecuting}
-                    rows={1}
-                    style={{ fontSize: '16px' }}
-                  />
-                </div>
-                
-                <div className="flex gap-1.5 shrink-0 pb-0.5">
-                  {voiceSupported && (
-                    <Button
-                      type="button"
-                      variant={isListening ? 'destructive' : 'outline'}
-                      size="icon"
-                      onClick={isListening ? stopListening : startListening}
-                      disabled={isExecuting || voiceStatus === 'permission-denied'}
-                      title={voiceStatusMessage}
-                      className={cn(
-                        'h-10 w-10 sm:h-11 sm:w-11 transition-all rounded-xl',
-                        isListening && 'ring-2 ring-destructive ring-offset-1'
-                      )}
-                    >
-                      {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                    </Button>
-                  )}
+                {/* Input area */}
+                <form onSubmit={handleSubmit} className="flex items-end gap-2 p-3 pt-0">
+                  <div className="flex-1 relative">
+                    <textarea
+                      ref={inputRef}
+                      value={inputValue}
+                      onChange={(e) => setInputValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSubmit();
+                        }
+                      }}
+                      placeholder={projectId ? "Type or speak..." : "Select a project..."}
+                      className="w-full min-h-[44px] max-h-[100px] overflow-y-auto resize-none rounded-xl border border-input bg-background px-3 py-3 text-base placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
+                      disabled={isExecuting}
+                      rows={1}
+                      style={{ fontSize: '16px' }}
+                    />
+                  </div>
                   
-                  <Button
-                    type="submit"
-                    size="icon"
-                    disabled={!inputValue.trim() || isExecuting}
-                    className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl"
-                  >
-                    <Send className="h-4 w-4" />
-                  </Button>
-                </div>
-              </form>
+                  <div className="flex gap-1.5 shrink-0 pb-0.5">
+                    {voiceSupported && (
+                      <Button
+                        type="button"
+                        variant={isListening ? 'destructive' : 'outline'}
+                        size="icon"
+                        onClick={isListening ? stopListening : startListening}
+                        disabled={isExecuting || voiceStatus === 'permission-denied'}
+                        title={voiceStatusMessage}
+                        className={cn(
+                          'h-10 w-10 sm:h-11 sm:w-11 transition-all rounded-xl',
+                          isListening && 'ring-2 ring-destructive ring-offset-1'
+                        )}
+                      >
+                        {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                      </Button>
+                    )}
+                    
+                    <Button
+                      type="submit"
+                      size="icon"
+                      disabled={!inputValue.trim() || isExecuting}
+                      className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl"
+                    >
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </form>
+              </div>
             </div>
-            
           </TabsContent>
 
-          <TabsContent value="history" className="flex-1 mt-0 data-[state=inactive]:hidden overflow-hidden">
+          <TabsContent value="history" className="flex-1 mt-0 data-[state=inactive]:hidden overflow-hidden m-0 p-3">
             <ActionLogViewer 
               projectId={projectId} 
               onUndo={handleUndo}
