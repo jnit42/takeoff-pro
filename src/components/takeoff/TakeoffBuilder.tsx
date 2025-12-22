@@ -577,17 +577,19 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
     return { status: 'unknown' as PriceStatus, icon: HelpCircle, color: 'text-muted-foreground' };
   };
 
-  // Calculate totals (only for active items)
-  const activeItems = items.filter(item => !item.draft);
-  const subtotal = activeItems.reduce((sum, item) => sum + (Number(item.extended_cost) || 0), 0);
+  // Calculate totals (active and draft separately)
+  const activeItemsForTotals = items.filter(item => !item.draft);
+  const draftItemsForTotals = items.filter(item => item.draft);
+  const activeSubtotal = activeItemsForTotals.reduce((sum, item) => sum + (Number(item.extended_cost) || 0), 0);
+  const draftSubtotal = draftItemsForTotals.reduce((sum, item) => sum + (Number(item.extended_cost) || 0), 0);
+  const subtotal = activeSubtotal + draftSubtotal; // Combined for total estimate
   const tax = subtotal * ((project.tax_percent || 0) / 100);
   const total = subtotal + tax;
 
-  // Calculate category totals
+  // Calculate category totals (include drafts with indicator)
   const categoryTotals = Object.entries(itemsByCategory).reduce((acc, [cat, catItems]) => {
-    acc[cat] = catItems
-      .filter(item => !item.draft)
-      .reduce((sum, item) => sum + (Number(item.extended_cost) || 0), 0);
+    // All items for category total (including drafts)
+    acc[cat] = catItems.reduce((sum, item) => sum + (Number(item.extended_cost) || 0), 0);
     return acc;
   }, {} as Record<string, number>);
 
@@ -1180,6 +1182,18 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                   </div>
                 )}
                 <div className="border-t pt-2 mt-2" />
+                {activeSubtotal > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Active Subtotal</span>
+                    <span className="font-mono">{formatCurrency(activeSubtotal)}</span>
+                  </div>
+                )}
+                {draftSubtotal > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Draft Subtotal</span>
+                    <span className="font-mono text-warning">{formatCurrency(draftSubtotal)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
                   <span className="font-mono">{formatCurrency(subtotal)}</span>
