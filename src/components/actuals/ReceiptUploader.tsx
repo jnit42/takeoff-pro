@@ -140,7 +140,34 @@ export function ReceiptUploader({ projectId, onUploadComplete, className }: Rece
 
       if (ocrResult?.success && ocrResult?.data) {
         setExtractedData(ocrResult.data);
-        toast({ title: 'Receipt processed successfully!' });
+        
+        // Show learning confirmation toast
+        const learnedRates = ocrResult.learned_rates || 0;
+        if (learnedRates > 0) {
+          // Find labor items to show what was learned
+          const laborItems = (ocrResult.data.line_items || []).filter((item: { description: string }) => {
+            const lower = item.description.toLowerCase();
+            return ['labor', 'install', 'demo', 'hour', 'service', 'work'].some(k => lower.includes(k));
+          });
+          
+          if (laborItems.length > 0) {
+            const firstLabor = laborItems[0] as { description: string; unit_price: number; unit: string };
+            toast({ 
+              title: '🧠 System Learning!',
+              description: `Learned: ${firstLabor.description} = $${firstLabor.unit_price}/${firstLabor.unit || 'EA'} based on this receipt.`,
+              duration: 5000,
+            });
+          } else {
+            toast({ 
+              title: '🧠 System Learning!',
+              description: `Learned ${learnedRates} labor rate${learnedRates > 1 ? 's' : ''} from this receipt.`,
+              duration: 5000,
+            });
+          }
+        } else {
+          toast({ title: 'Receipt processed successfully!' });
+        }
+        
         onUploadComplete?.(receipt.id);
       } else {
         throw new Error(ocrResult?.error || 'OCR processing failed');
