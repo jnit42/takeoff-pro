@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Settings as SettingsIcon, User, Building, Loader2, Brain, BookOpen, Sparkles } from 'lucide-react';
+import { Settings as SettingsIcon, User, Building, Loader2, Brain, BookOpen, Sparkles, FlaskConical } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { AIAuditLog } from '@/components/ai/AIAuditLog';
 import { KnowledgeBaseViewer } from '@/components/ai/KnowledgeBaseViewer';
 import { LearningSettings } from '@/components/settings/LearningSettings';
+import { CalibrationMode } from '@/components/settings/CalibrationMode';
 
 interface Profile {
   id: string;
@@ -74,10 +75,14 @@ export default function Settings() {
         </div>
 
         <Tabs defaultValue="profile" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="profile" className="gap-2">
               <User className="h-4 w-4" />
               <span className="hidden sm:inline">Profile</span>
+            </TabsTrigger>
+            <TabsTrigger value="calibration" className="gap-2">
+              <FlaskConical className="h-4 w-4" />
+              <span className="hidden sm:inline">Calibrate</span>
             </TabsTrigger>
             <TabsTrigger value="learning" className="gap-2">
               <Sparkles className="h-4 w-4" />
@@ -188,6 +193,10 @@ export default function Settings() {
                 )}
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="calibration">
+            <CalibrationMode />
           </TabsContent>
 
           <TabsContent value="learning">
