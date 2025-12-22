@@ -446,7 +446,7 @@ function buildToolDefinitions() {
       type: 'function',
       function: {
         name: 'propose_actions',
-        description: 'Propose one or more actions to be executed (add items, update prices, etc.)',
+        description: 'Propose one or more actions to be executed (add items, update prices, delete items, etc.)',
         parameters: {
           type: 'object',
           properties: {
@@ -457,16 +457,30 @@ function buildToolDefinitions() {
                 properties: {
                   type: { 
                     type: 'string',
-                    enum: ['takeoff.add_item', 'takeoff.add_multiple', 'takeoff.update_item', 'labor.add_task', 'project.update', 'pricing.lookup']
+                    enum: [
+                      'takeoff.add_item', 
+                      'takeoff.add_multiple', 
+                      'takeoff.update_item', 
+                      'takeoff.delete_item',
+                      'takeoff.delete_items',
+                      'labor.add_task', 
+                      'project.update', 
+                      'pricing.lookup',
+                      'export.pdf',
+                      'export.csv'
+                    ]
                   },
-                  params: { type: 'object' },
-                  confidence: { type: 'number', minimum: 0, maximum: 100 }
+                  params: { 
+                    type: 'object',
+                    description: 'For takeoff.add_item use: description, quantity, unit, unit_cost, category. For takeoff.delete_item use: description or item_id. For pricing.lookup use: item (string). For export use: which (takeoff/labor/rfis).'
+                  },
+                  confidence: { type: 'number', minimum: 0, maximum: 1 }
                 },
                 required: ['type', 'params', 'confidence']
               }
             },
             reasoning: { type: 'string', description: 'Explanation of why these actions are proposed' },
-            overall_confidence: { type: 'number', minimum: 0, maximum: 100 },
+            overall_confidence: { type: 'number', minimum: 0, maximum: 1 },
             data_sources: { 
               type: 'array', 
               items: { type: 'string' },
@@ -491,7 +505,7 @@ function buildToolDefinitions() {
           type: 'object',
           properties: {
             explanation: { type: 'string' },
-            confidence: { type: 'number', minimum: 0, maximum: 100 },
+            confidence: { type: 'number', minimum: 0, maximum: 1 },
             sources: { type: 'array', items: { type: 'string' } },
             follow_up_questions: { type: 'array', items: { type: 'string' } }
           },
