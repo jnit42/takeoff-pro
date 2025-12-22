@@ -397,13 +397,20 @@ async function executeTakeoffAddItem(
 
   const quantity = (params.quantity as number) || 0;
   
-  // Sanitize unit_cost - convert "?" or non-numeric to null
+  // Sanitize unit_cost - aggressively convert ANY non-numeric to null
   const rawUnitCost = params.unit_cost ?? params.cost ?? params.price;
-  const unitCost = (typeof rawUnitCost === 'number' && !isNaN(rawUnitCost)) 
-    ? rawUnitCost 
-    : (typeof rawUnitCost === 'string' && !isNaN(parseFloat(rawUnitCost)) && rawUnitCost !== '?')
-      ? parseFloat(rawUnitCost)
-      : null;
+  let unitCost: number | null = null;
+  if (typeof rawUnitCost === 'number' && !isNaN(rawUnitCost)) {
+    unitCost = rawUnitCost;
+  } else if (typeof rawUnitCost === 'string') {
+    // Strip currency symbols and commas, then try to parse
+    const cleanStr = rawUnitCost.replace(/[$,]/g, '').trim();
+    const parsed = parseFloat(cleanStr);
+    // Only assign if it's a valid number (catches "TBD", "?", "N/A", etc.)
+    if (!isNaN(parsed)) {
+      unitCost = parsed;
+    }
+  }
 
   const { data: item, error } = await supabase
     .from('takeoff_items')
@@ -461,13 +468,18 @@ async function executeTakeoffAddMultiple(
 
   const insertData = items.map((item) => {
     const qty = item.quantity || 0;
-    // Sanitize unit_cost - convert "?" or non-numeric to null
+    // Sanitize unit_cost - aggressively convert ANY non-numeric to null
     const rawCost = item.unit_cost;
-    const cost = (typeof rawCost === 'number' && !isNaN(rawCost)) 
-      ? rawCost 
-      : (typeof rawCost === 'string' && !isNaN(parseFloat(rawCost as unknown as string)) && rawCost !== '?')
-        ? parseFloat(rawCost as unknown as string)
-        : null;
+    let cost: number | null = null;
+    if (typeof rawCost === 'number' && !isNaN(rawCost)) {
+      cost = rawCost;
+    } else if (typeof rawCost === 'string') {
+      const cleanStr = (rawCost as string).replace(/[$,]/g, '').trim();
+      const parsed = parseFloat(cleanStr);
+      if (!isNaN(parsed)) {
+        cost = parsed;
+      }
+    }
     
     return {
       project_id: context.projectId,
