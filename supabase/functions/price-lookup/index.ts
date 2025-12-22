@@ -486,15 +486,29 @@ Search term: ${item}`
           const confidence = calculateMatchConfidence(item, product.name, specs);
           
           if (confidence >= 0.4) {
-            // Validate and clean productUrl from Firecrawl
+            // Validate and clean productUrl from Firecrawl - be STRICT about fake URLs
             let productUrl: string | null = null;
             
             if (product.productUrl && typeof product.productUrl === 'string') {
               const url = product.productUrl.trim();
-              // Only accept URLs that start with valid store domains
-              if (url.startsWith('https://www.homedepot.com/') || 
-                  url.startsWith('https://www.lowes.com/')) {
+              
+              // Only accept URLs that:
+              // 1. Start with valid store domains
+              // 2. Have a real product path (not just the domain or a fake path)
+              // 3. Don't contain obvious placeholder patterns
+              const isValidHD = url.startsWith('https://www.homedepot.com/p/') && 
+                               url.length > 40 && 
+                               !url.includes('123456') &&
+                               !url.includes('undefined');
+              const isValidLowes = url.startsWith('https://www.lowes.com/pd/') && 
+                                  url.length > 35 && 
+                                  !url.includes('123456') &&
+                                  !url.includes('undefined');
+              
+              if (isValidHD || isValidLowes) {
                 productUrl = url;
+              } else {
+                console.log(`[price-lookup] Rejected invalid URL: ${url.slice(0, 60)}...`);
               }
             }
             
