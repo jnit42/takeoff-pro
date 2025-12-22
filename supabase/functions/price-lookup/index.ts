@@ -487,37 +487,29 @@ Search term: ${item}`
         
         for (const product of data.data.extract.products.slice(0, 5)) {
           const confidence = calculateMatchConfidence(item, product.name, specs);
+          console.log(`[price-lookup] Product: ${product.name}, confidence: ${confidence.toFixed(2)}, price: $${product.price}`);
           
-          if (confidence >= 0.4) {
-            // Validate and clean productUrl from Firecrawl - be VERY STRICT about valid product URLs
+          // Lower threshold - if we have a price, show it (user can decide)
+          if (confidence >= 0.2 && product.price) {
+            // Validate and clean productUrl from Firecrawl
+            // Firecrawl may return fake/hallucinated URLs, so use search URLs as primary fallback
             let productUrl: string | null = null;
             
             if (product.productUrl && typeof product.productUrl === 'string') {
               const url = product.productUrl.trim();
               
-              // Validate Home Depot URLs - MUST be a Product Detail Page (PDP)
-              // Valid: /p/ (product page)
-              // Invalid: /b/ (browse/category), /c/ (category), /s/ (search), /collection/
+              // Validate Home Depot URLs - accept /p/ product pages
               const isValidHD = url.startsWith('https://www.homedepot.com/p/') && 
                                url.length > 50 &&
                                !url.includes('/b/') &&
-                               !url.includes('/c/') &&
                                !url.includes('/s/') &&
-                               !url.includes('/collection/') &&
-                               !url.includes('123456') &&
                                !url.includes('undefined') &&
-                               !url.includes('null') &&
-                               /\/p\/[A-Za-z0-9-]+\/\d{9}/.test(url); // HD product URLs have 9-digit ID at end
+                               !url.includes('null');
               
-              // Validate Lowe's URLs - MUST be a Product Detail Page
-              // Valid: /pd/ (product detail)
-              // Invalid: /pl/ (product list), /search/, /c/ (category)
+              // Validate Lowe's URLs - accept /pd/ product detail pages
               const isValidLowes = url.startsWith('https://www.lowes.com/pd/') && 
                                   url.length > 40 &&
-                                  !url.includes('/pl/') &&
                                   !url.includes('/search/') &&
-                                  !url.includes('/c/') &&
-                                  !url.includes('123456') &&
                                   !url.includes('undefined') &&
                                   !url.includes('null');
               
@@ -525,15 +517,17 @@ Search term: ${item}`
                 productUrl = url;
                 console.log(`[price-lookup] Accepted valid product URL: ${url.slice(0, 80)}...`);
               } else {
-                console.log(`[price-lookup] Rejected non-PDP URL: ${url.slice(0, 80)}... (must be /p/ or /pd/)`);
+                console.log(`[price-lookup] URL not a valid PDP, using search fallback: ${url.slice(0, 60)}...`);
               }
             }
             
-            // Fallback to search URL if no valid product URL - user can click to find product
+            // Always use search URL as fallback - much more reliable than Firecrawl URLs
             if (!productUrl) {
               productUrl = buildProductUrl(store, null, product.name);
-              console.log(`[price-lookup] Using fallback search URL for ${product.name}`);
             }
+            
+            // ALWAYS add the result if we have a price - don't filter too aggressively
+            console.log(`[price-lookup] Adding result: ${product.name} @ $${product.price} from ${store}`);
             
             storeResults.push({
               store,
