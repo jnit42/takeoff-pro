@@ -61,16 +61,21 @@ async function authenticateRequest(req: Request): Promise<{ authenticated: boole
   return { authenticated: true, userId: user.id };
 }
 
-async function verifyProjectOwnership(supabase: ReturnType<typeof createClient>, userId: string, projectId: string): Promise<boolean> {
+async function verifyProjectOwnership(userId: string, projectId: string): Promise<boolean> {
   if (!projectId) return false;
 
-  const { data: project } = await supabase
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
+
+  const { data: project } = await serviceClient
     .from('projects')
     .select('user_id')
     .eq('id', projectId)
     .single();
 
-  return project?.user_id === userId;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (project as any)?.user_id === userId;
 }
 
 serve(async (req) => {
@@ -120,7 +125,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     if (projectId) {
-      const ownsProject = await verifyProjectOwnership(supabase, userId, projectId);
+      const ownsProject = await verifyProjectOwnership(userId, projectId);
       if (!ownsProject) {
         console.error('[receipt-ocr] Access denied: user does not own project');
         return new Response(
