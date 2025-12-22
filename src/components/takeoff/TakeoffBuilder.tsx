@@ -11,10 +11,10 @@ import {
   CheckCircle2,
   FileUp,
   Trash,
-  MapPin,
-  DollarSign,
-  ExternalLink,
-  RefreshCw
+  RefreshCw,
+  Check,
+  Clock,
+  HelpCircle
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -87,13 +87,26 @@ interface TakeoffBuilderProps {
   };
 }
 
+type PriceStatus = 'verified' | 'stale' | 'unknown';
+
 interface PriceResult {
-  store: string;
+  source: 'global_cache' | 'price_book' | 'knowledge_base' | 'scraped_fresh';
+  status: PriceStatus;
   price: number | null;
   unit: string;
   productName: string;
-  productUrl: string;
-  inStock: boolean;
+  confidence: number;
+  store?: string;
+  productUrl?: string;
+  note?: string;
+}
+
+// Track price status per item
+interface ItemPriceStatus {
+  status: PriceStatus;
+  price: number | null;
+  store?: string;
+  lastUpdated?: string;
 }
 
 export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
@@ -103,8 +116,9 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
   const [showDrafts, setShowDrafts] = useState(true);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [priceResults, setPriceResults] = useState<Record<string, PriceResult[]>>({});
+  const [itemPriceStatus, setItemPriceStatus] = useState<Record<string, ItemPriceStatus>>({});
+  const [loadingPriceFor, setLoadingPriceFor] = useState<string | null>(null);
   const [priceLookupItem, setPriceLookupItem] = useState<TakeoffItem | null>(null);
-  const [isLoadingPrices, setIsLoadingPrices] = useState(false);
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['takeoff-items', projectId],
@@ -135,33 +149,99 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
     },
   });
 
-  // Price lookup mutation
-  const priceLookupMutation = useMutation({
-    mutationFn: async (itemDescriptions: string[]) => {
-      setIsLoadingPrices(true);
+  // Initial price check - get cached prices for all items (no scraping)
+  const { data: initialPrices, isLoading: isLoadingInitialPrices } = useQuery({
+    queryKey: ['initial-prices', projectId, items.map(i => i.description).join(',')],
+    queryFn: async () => {
+      if (items.length === 0) return null;
+      
+      const descriptions = items.slice(0, 10).map(i => i.description);
       const { data, error } = await supabase.functions.invoke('price-lookup', {
         body: { 
-          items: itemDescriptions,
+          items: descriptions,
           zipCode: projectData?.zip_code || undefined,
+          forceRefresh: false, // Never auto-scrape
         }
       });
       if (error) throw error;
       return data;
     },
-    onSuccess: (data) => {
-      if (data.success && data.results) {
-        setPriceResults(prev => ({ ...prev, ...data.results }));
-        toast({ title: 'Prices loaded from Home Depot & Lowes' });
-      } else {
-        toast({ title: 'No prices found', variant: 'destructive' });
-      }
-      setIsLoadingPrices(false);
-    },
-    onError: (error) => {
-      toast({ title: 'Price lookup failed', description: error.message, variant: 'destructive' });
-      setIsLoadingPrices(false);
-    },
+    enabled: items.length > 0 && !!projectData,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
+
+  // Update price status when initial prices load
+  useState(() => {
+    if (initialPrices?.results) {
+      const newStatus: Record<string, ItemPriceStatus> = {};
+      for (const [desc, results] of Object.entries(initialPrices.results as Record<string, PriceResult[]>)) {
+        const best = results[0];
+        if (best) {
+          const item = items.find(i => i.description === desc);
+          if (item) {
+            newStatus[item.id] = {
+              status: best.status,
+              price: best.price,
+              store: best.store,
+            };
+          }
+        }
+      }
+      setItemPriceStatus(prev => ({ ...prev, ...newStatus }));
+    }
+  });
+
+  // Single item price refresh (triggers scrape)
+  const refreshSinglePrice = async (item: TakeoffItem) => {
+    setLoadingPriceFor(item.id);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('price-lookup', {
+        body: { 
+          items: [item.description],
+          zipCode: projectData?.zip_code || undefined,
+          forceRefresh: true, // This triggers scraping
+        }
+      });
+      
+      if (error) throw error;
+      
+      if (data.success && data.results?.[item.description]) {
+        const results = data.results[item.description] as PriceResult[];
+        setPriceResults(prev => ({ ...prev, [item.description]: results }));
+        
+        const best = results[0];
+        if (best) {
+          setItemPriceStatus(prev => ({
+            ...prev,
+            [item.id]: {
+              status: best.status,
+              price: best.price,
+              store: best.store,
+            }
+          }));
+          
+          toast({ 
+            title: 'Price Updated', 
+            description: best.price 
+              ? `$${best.price.toFixed(2)} from ${best.store || 'cache'}` 
+              : 'No price found'
+          });
+        }
+        
+        // Open dialog to show options
+        setPriceLookupItem(item);
+      }
+    } catch (error: any) {
+      toast({ 
+        title: 'Price lookup failed', 
+        description: error.message, 
+        variant: 'destructive' 
+      });
+    } finally {
+      setLoadingPriceFor(null);
+    }
+  };
 
   // Apply price from lookup
   const applyPrice = (itemId: string, price: number, vendor: string) => {
@@ -169,6 +249,13 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
       id: itemId, 
       updates: { unit_cost: price, vendor } 
     });
+    
+    // Mark as verified since user confirmed
+    setItemPriceStatus(prev => ({
+      ...prev,
+      [itemId]: { status: 'verified', price, store: vendor }
+    }));
+    
     toast({ title: `Applied $${price.toFixed(2)} from ${vendor}` });
   };
 
@@ -392,6 +479,29 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
     }
   };
 
+  // Get price status icon/color for an item
+  const getPriceStatusIndicator = (item: TakeoffItem) => {
+    // If user has manually set a price, treat as verified
+    if (item.unit_cost && item.unit_cost > 0 && item.vendor) {
+      return { status: 'verified' as PriceStatus, icon: Check, color: 'text-green-500' };
+    }
+    
+    const cachedStatus = itemPriceStatus[item.id];
+    if (cachedStatus) {
+      switch (cachedStatus.status) {
+        case 'verified':
+          return { status: 'verified' as PriceStatus, icon: Check, color: 'text-green-500' };
+        case 'stale':
+          return { status: 'stale' as PriceStatus, icon: Clock, color: 'text-muted-foreground' };
+        case 'unknown':
+          return { status: 'unknown' as PriceStatus, icon: HelpCircle, color: 'text-yellow-500' };
+      }
+    }
+    
+    // No status yet
+    return { status: 'unknown' as PriceStatus, icon: HelpCircle, color: 'text-muted-foreground' };
+  };
+
   // Calculate totals (only for active items)
   const activeItems = items.filter(item => !item.draft);
   const subtotal = activeItems.reduce((sum, item) => sum + (Number(item.extended_cost) || 0), 0);
@@ -541,7 +651,7 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
         </Card>
       )}
 
-      {/* Add Item Section */}
+      {/* Add Item Section - REMOVED bulk "Check Live Prices" button */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
@@ -549,24 +659,18 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
               <CardTitle className="text-lg">Add Line Item</CardTitle>
               <CardDescription>Select a category to add a new takeoff item</CardDescription>
             </div>
-            {items.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const descriptions = items.slice(0, 5).map(i => i.description);
-                  priceLookupMutation.mutate(descriptions);
-                }}
-                disabled={isLoadingPrices || items.length === 0}
-              >
-                {isLoadingPrices ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <DollarSign className="h-4 w-4 mr-2" />
-                )}
-                Check Live Prices
-              </Button>
-            )}
+            {/* Price legend */}
+            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <Check className="h-3 w-3 text-green-500" /> Verified
+              </span>
+              <span className="flex items-center gap-1">
+                <Clock className="h-3 w-3" /> Stale
+              </span>
+              <span className="flex items-center gap-1">
+                <HelpCircle className="h-3 w-3 text-yellow-500" /> Unknown
+              </span>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -612,8 +716,8 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5 text-primary" />
-              Live Prices: {priceLookupItem?.description}
+              <RefreshCw className="h-5 w-5 text-primary" />
+              Price Options: {priceLookupItem?.description}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
@@ -621,26 +725,34 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
               priceResults[priceLookupItem?.description || ''].map((result, idx) => (
                 <Card key={idx} className="p-3">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium capitalize">{result.store}</p>
-                      <p className="text-sm text-muted-foreground truncate max-w-[200px]">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        {result.status === 'verified' && <Check className="h-4 w-4 text-green-500" />}
+                        {result.status === 'stale' && <Clock className="h-4 w-4 text-muted-foreground" />}
+                        {result.status === 'unknown' && <HelpCircle className="h-4 w-4 text-yellow-500" />}
+                        <span className="font-medium capitalize">{result.store || result.source}</span>
+                        <Badge variant={result.status === 'verified' ? 'default' : 'secondary'} className="text-xs">
+                          {result.status}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground truncate max-w-[200px] mt-1">
                         {result.productName}
                       </p>
                       {result.price && (
-                        <p className="text-lg font-mono font-bold text-primary">
+                        <p className="text-lg font-mono font-bold text-primary mt-1">
                           ${result.price.toFixed(2)}/{result.unit}
                         </p>
                       )}
-                      <Badge variant={result.inStock ? 'default' : 'secondary'} className="mt-1">
-                        {result.inStock ? 'In Stock' : 'Out of Stock'}
-                      </Badge>
+                      {result.note && (
+                        <p className="text-xs text-muted-foreground mt-1">{result.note}</p>
+                      )}
                     </div>
                     <div className="flex flex-col gap-2">
                       {result.price && priceLookupItem && (
                         <Button
                           size="sm"
                           onClick={() => {
-                            applyPrice(priceLookupItem.id, result.price!, result.store);
+                            applyPrice(priceLookupItem.id, result.price!, result.store || 'Cache');
                             setPriceLookupItem(null);
                           }}
                         >
@@ -653,7 +765,7 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                           size="sm"
                           onClick={() => window.open(result.productUrl, '_blank')}
                         >
-                          <ExternalLink className="h-3 w-3" />
+                          View
                         </Button>
                       )}
                     </div>
@@ -662,22 +774,9 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
               ))
             ) : (
               <div className="text-center py-8 text-muted-foreground">
-                <DollarSign className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p>No prices found yet</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-2"
-                  onClick={() => {
-                    if (priceLookupItem) {
-                      priceLookupMutation.mutate([priceLookupItem.description]);
-                    }
-                  }}
-                  disabled={isLoadingPrices}
-                >
-                  {isLoadingPrices ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-                  Search Now
-                </Button>
+                <HelpCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p>No prices found</p>
+                <p className="text-xs mt-1">Try editing the description to be more specific</p>
               </div>
             )}
           </div>
@@ -748,167 +847,191 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                             <TableHead className="w-[80px] text-right">Adj Qty</TableHead>
                             <TableHead className="w-[70px] text-right">Pkg Size</TableHead>
                             <TableHead className="w-[70px] text-right">Pkgs</TableHead>
-                            <TableHead className="w-[90px] text-right">Unit $</TableHead>
+                            <TableHead className="w-[120px] text-right">Unit $</TableHead>
                             <TableHead className="w-[100px] text-right">Extended</TableHead>
                             <TableHead className="w-[120px]">Vendor</TableHead>
                             <TableHead className="w-[50px]"></TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {catItems.map((item) => (
-                            <TableRow 
-                              key={item.id}
-                              className={item.draft ? 'bg-warning/5' : ''}
-                            >
-                              {showDrafts && draftCount > 0 && (
+                          {catItems.map((item) => {
+                            const priceIndicator = getPriceStatusIndicator(item);
+                            const StatusIcon = priceIndicator.icon;
+                            const isLoadingThis = loadingPriceFor === item.id;
+                            
+                            return (
+                              <TableRow 
+                                key={item.id}
+                                className={item.draft ? 'bg-warning/5' : ''}
+                              >
+                                {showDrafts && draftCount > 0 && (
+                                  <TableCell>
+                                    {item.draft && (
+                                      <Checkbox
+                                        checked={selectedItems.has(item.id)}
+                                        onCheckedChange={() => toggleSelectItem(item.id)}
+                                      />
+                                    )}
+                                  </TableCell>
+                                )}
                                 <TableCell>
-                                  {item.draft && (
-                                    <Checkbox
-                                      checked={selectedItems.has(item.id)}
-                                      onCheckedChange={() => toggleSelectItem(item.id)}
+                                  <div className="flex items-center gap-2">
+                                    {item.draft && (
+                                      <Badge variant="outline" className="bg-warning/20 text-warning border-warning/50 text-xs shrink-0">
+                                        Draft
+                                      </Badge>
+                                    )}
+                                    <Input
+                                      value={item.description}
+                                      onChange={(e) =>
+                                        handleInputChange(item.id, 'description', e.target.value)
+                                      }
+                                      className="h-8"
                                     />
-                                  )}
+                                  </div>
                                 </TableCell>
-                              )}
-                              <TableCell>
-                                <div className="flex items-center gap-2">
-                                  {item.draft && (
-                                    <Badge variant="outline" className="bg-warning/20 text-warning border-warning/50 text-xs shrink-0">
-                                      Draft
-                                    </Badge>
-                                  )}
+                                <TableCell>
                                   <Input
-                                    value={item.description}
+                                    value={item.spec || ''}
                                     onChange={(e) =>
-                                      handleInputChange(item.id, 'description', e.target.value)
+                                      handleInputChange(item.id, 'spec', e.target.value)
                                     }
                                     className="h-8"
+                                    placeholder="..."
                                   />
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  value={item.spec || ''}
-                                  onChange={(e) =>
-                                    handleInputChange(item.id, 'spec', e.target.value)
-                                  }
-                                  className="h-8"
-                                  placeholder="..."
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Select
-                                  value={item.unit}
-                                  onValueChange={(value) =>
-                                    handleInputChange(item.id, 'unit', value)
-                                  }
-                                >
-                                  <SelectTrigger className="h-8">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {UNITS.map((unit) => (
-                                      <SelectItem key={unit} value={unit}>
-                                        {unit}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  type="number"
-                                  value={item.quantity}
-                                  onChange={(e) =>
-                                    handleInputChange(item.id, 'quantity', e.target.value)
-                                  }
-                                  className="h-8 text-right font-mono"
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  type="number"
-                                  value={item.waste_percent || 0}
-                                  onChange={(e) =>
-                                    handleInputChange(item.id, 'waste_percent', e.target.value)
-                                  }
-                                  className="h-8 text-right font-mono"
-                                />
-                              </TableCell>
-                              <TableCell className="text-right font-mono text-muted-foreground">
-                                {formatNumber(item.adjusted_qty || 0, 2)}
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  type="number"
-                                  value={item.package_size || 1}
-                                  onChange={(e) =>
-                                    handleInputChange(item.id, 'package_size', e.target.value)
-                                  }
-                                  className="h-8 text-right font-mono"
-                                />
-                              </TableCell>
-                              <TableCell className="text-right font-mono text-muted-foreground">
-                                {item.packages || 0}
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center gap-1">
+                                </TableCell>
+                                <TableCell>
+                                  <Select
+                                    value={item.unit}
+                                    onValueChange={(value) =>
+                                      handleInputChange(item.id, 'unit', value)
+                                    }
+                                  >
+                                    <SelectTrigger className="h-8">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {UNITS.map((unit) => (
+                                        <SelectItem key={unit} value={unit}>
+                                          {unit}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </TableCell>
+                                <TableCell>
                                   <Input
                                     type="number"
-                                    step="0.01"
-                                    value={item.unit_cost || 0}
+                                    value={item.quantity}
                                     onChange={(e) =>
-                                      handleInputChange(item.id, 'unit_cost', e.target.value)
+                                      handleInputChange(item.id, 'quantity', e.target.value)
                                     }
-                                    className="h-8 text-right font-mono w-20"
+                                    className="h-8 text-right font-mono"
                                   />
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-8 w-8 text-muted-foreground hover:text-primary"
-                                          onClick={() => {
-                                            setPriceLookupItem(item);
-                                            if (!priceResults[item.description]) {
-                                              priceLookupMutation.mutate([item.description]);
-                                            }
-                                          }}
-                                        >
-                                          <DollarSign className="h-4 w-4" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>Check live prices</TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-right font-mono font-medium">
-                                {formatCurrency(item.extended_cost || 0)}
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  value={item.vendor || ''}
-                                  onChange={(e) =>
-                                    handleInputChange(item.id, 'vendor', e.target.value)
-                                  }
-                                  className="h-8"
-                                  placeholder="..."
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => deleteItemMutation.mutate(item.id)}
-                                  className="text-muted-foreground hover:text-destructive h-8 w-8"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))}
+                                </TableCell>
+                                <TableCell>
+                                  <Input
+                                    type="number"
+                                    value={item.waste_percent || 0}
+                                    onChange={(e) =>
+                                      handleInputChange(item.id, 'waste_percent', e.target.value)
+                                    }
+                                    className="h-8 text-right font-mono"
+                                  />
+                                </TableCell>
+                                <TableCell className="text-right font-mono text-muted-foreground">
+                                  {formatNumber(item.adjusted_qty || 0, 2)}
+                                </TableCell>
+                                <TableCell>
+                                  <Input
+                                    type="number"
+                                    value={item.package_size || 1}
+                                    onChange={(e) =>
+                                      handleInputChange(item.id, 'package_size', e.target.value)
+                                    }
+                                    className="h-8 text-right font-mono"
+                                  />
+                                </TableCell>
+                                <TableCell className="text-right font-mono text-muted-foreground">
+                                  {item.packages || 0}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-1">
+                                    {/* Status indicator */}
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <div className={`shrink-0 ${priceIndicator.color}`}>
+                                            <StatusIcon className="h-4 w-4" />
+                                          </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          {priceIndicator.status === 'verified' && 'Price verified'}
+                                          {priceIndicator.status === 'stale' && 'Price may be outdated - click refresh'}
+                                          {priceIndicator.status === 'unknown' && 'No price data - click refresh'}
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                    
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      value={item.unit_cost || 0}
+                                      onChange={(e) =>
+                                        handleInputChange(item.id, 'unit_cost', e.target.value)
+                                      }
+                                      className="h-8 text-right font-mono w-20"
+                                    />
+                                    
+                                    {/* Refresh button - LAZY LOAD per item */}
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8 text-muted-foreground hover:text-primary"
+                                            onClick={() => refreshSinglePrice(item)}
+                                            disabled={isLoadingThis}
+                                          >
+                                            {isLoadingThis ? (
+                                              <Loader2 className="h-4 w-4 animate-spin" />
+                                            ) : (
+                                              <RefreshCw className="h-4 w-4" />
+                                            )}
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Get live price from stores</TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-right font-mono font-medium">
+                                  {formatCurrency(item.extended_cost || 0)}
+                                </TableCell>
+                                <TableCell>
+                                  <Input
+                                    value={item.vendor || ''}
+                                    onChange={(e) =>
+                                      handleInputChange(item.id, 'vendor', e.target.value)
+                                    }
+                                    className="h-8"
+                                    placeholder="..."
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => deleteItemMutation.mutate(item.id)}
+                                    className="text-muted-foreground hover:text-destructive h-8 w-8"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
                         </TableBody>
                       </Table>
                     </div>

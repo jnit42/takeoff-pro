@@ -1,9 +1,11 @@
 /**
  * Price Lookup Edge Function
- * Architecture: SKU-based matching → Price Book → Scraped Suggestions → Knowledge Base
+ * Architecture: Global Cache (store_sku_mappings) → Price Book → Knowledge Base
  * 
- * Scraped prices are SUGGESTIONS only, never auto-applied.
- * User must confirm before accepting into price book.
+ * COST-SAVING DESIGN:
+ * - Check store_sku_mappings FIRST (global cache, shared across all users)
+ * - Only scrape on explicit forceRefresh request
+ * - Return status indicators so UI can show verified/stale/unknown
  */
 
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
@@ -18,9 +20,13 @@ const corsHeaders = {
 // Rate limits
 const MAX_LOOKUPS_PER_DAY = 50;
 const MAX_ITEMS_PER_REQUEST = 10;
+const CACHE_FRESHNESS_HOURS = 48;
+
+type PriceStatus = 'verified' | 'stale' | 'unknown';
 
 interface PriceResult {
-  source: 'price_book' | 'product_catalog' | 'scraped_suggestion' | 'knowledge_base' | 'cache';
+  source: 'global_cache' | 'price_book' | 'knowledge_base' | 'scraped_fresh';
+  status: PriceStatus;
   price: number | null;
   unit: string;
   productName: string;
@@ -31,8 +37,9 @@ interface PriceResult {
   sku?: string;
   store?: string;
   inStock?: boolean;
-  suggestionId?: string;
   lastUpdated?: string;
+  catalogId?: string;
+  mappingId?: string;
 }
 
 interface PriceLookupRequest {
@@ -85,7 +92,6 @@ async function checkAndUpdateRateLimit(
   
   const today = new Date().toISOString().split('T')[0];
   
-  // Check current usage - using raw query for new table
   const { data: existing } = await supabase
     .from('user_lookup_limits')
     .select('*')
@@ -105,7 +111,6 @@ async function checkAndUpdateRateLimit(
       };
     }
     
-    // Increment count
     await supabase
       .from('user_lookup_limits')
       .update({ 
@@ -117,7 +122,6 @@ async function checkAndUpdateRateLimit(
     return { allowed: true, remaining: MAX_LOOKUPS_PER_DAY - existingRow.lookup_count - 1 };
   }
 
-  // Create new record for today
   await supabase
     .from('user_lookup_limits')
     .insert({
@@ -152,19 +156,16 @@ function extractProductSpecs(item: string): {
 } {
   const specs: { size?: string; thickness?: string; type?: string; brand?: string; dimensions?: string } = {};
   
-  // Extract dimensions like 4x8, 2x4, etc.
   const dimMatch = item.match(/(\d+)\s*[xX×]\s*(\d+)/);
   if (dimMatch) {
     specs.dimensions = `${dimMatch[1]}x${dimMatch[2]}`;
   }
   
-  // Extract thickness like 1/2", 5/8", etc.
   const thickMatch = item.match(/(\d+\/\d+|\d+\.?\d*)\s*["']?/);
   if (thickMatch) {
     specs.thickness = thickMatch[1];
   }
   
-  // Extract common types
   const typePatterns = [
     'standard', 'type x', 'fire-rated', 'moisture resistant', 'mold resistant',
     'exterior', 'interior', 'treated', 'pressure treated', 'pt', 'cdx', 'osb', 'plywood'
@@ -185,19 +186,14 @@ function calculateMatchConfidence(searchTerm: string, productName: string, specs
   
   let confidence = 0;
   
-  // Exact match
   if (normalizedSearch === normalizedProduct) return 1.0;
-  
-  // Contains full search term
   if (normalizedProduct.includes(normalizedSearch)) confidence += 0.5;
   
-  // Word matching
   const searchWords = normalizedSearch.split(' ').filter(w => w.length > 2);
   const productWords = normalizedProduct.split(' ');
   const matchedWords = searchWords.filter(w => productWords.some(pw => pw.includes(w)));
-  confidence += (matchedWords.length / searchWords.length) * 0.3;
+  confidence += (matchedWords.length / Math.max(searchWords.length, 1)) * 0.3;
   
-  // Spec matching bonus
   if (specs.dimensions && normalizedProduct.includes(specs.dimensions.toLowerCase())) confidence += 0.1;
   if (specs.thickness && normalizedProduct.includes(specs.thickness)) confidence += 0.1;
   
@@ -205,7 +201,26 @@ function calculateMatchConfidence(searchTerm: string, productName: string, specs
 }
 
 // ========================================
-// SCRAPING WITH FIRECRAWL
+// CHECK CACHE FRESHNESS
+// ========================================
+
+function isCacheFresh(lastPriceAt: string | null): boolean {
+  if (!lastPriceAt) return false;
+  
+  const cacheTime = new Date(lastPriceAt).getTime();
+  const now = Date.now();
+  const hoursDiff = (now - cacheTime) / (1000 * 60 * 60);
+  
+  return hoursDiff < CACHE_FRESHNESS_HOURS;
+}
+
+function getCacheStatus(lastPriceAt: string | null): PriceStatus {
+  if (!lastPriceAt) return 'unknown';
+  return isCacheFresh(lastPriceAt) ? 'verified' : 'stale';
+}
+
+// ========================================
+// SCRAPING WITH FIRECRAWL (Only on forceRefresh)
 // ========================================
 
 async function scrapeStorePrices(
@@ -243,7 +258,7 @@ async function scrapeStorePrices(
   const normalizedItem = normalizeSearchTerm(item);
   const specs = extractProductSpecs(item);
 
-  for (const store of stores.slice(0, 2)) { // Max 2 stores per item
+  for (const store of stores.slice(0, 2)) {
     try {
       let searchUrl = '';
       
@@ -306,10 +321,8 @@ async function scrapeStorePrices(
       
       if (data.success && data.data?.extract?.products) {
         for (const product of data.data.extract.products.slice(0, 3)) {
-          // Calculate match confidence
           const confidence = calculateMatchConfidence(item, product.name, specs);
           
-          // Only include if confidence is above threshold
           if (confidence >= 0.4) {
             results.push({
               store,
@@ -333,10 +346,10 @@ async function scrapeStorePrices(
 }
 
 // ========================================
-// CATALOG LEARNING
+// CATALOG LEARNING - Update Global Cache
 // ========================================
 
-async function learnFromScrape(
+async function updateGlobalCache(
   searchTerm: string,
   scrapedProduct: {
     store: string;
@@ -352,12 +365,12 @@ async function learnFromScrape(
   const supabase = createClient(supabaseUrl, supabaseKey);
   
   try {
-    // Check if product already in catalog
     const normalizedKey = normalizeSearchTerm(scrapedProduct.productName)
       .replace(/\s+/g, '_')
       .toUpperCase()
       .slice(0, 50);
 
+    // Check if product already in catalog
     const { data: existing } = await supabase
       .from('product_catalog')
       .select('id, usage_count')
@@ -366,32 +379,18 @@ async function learnFromScrape(
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const existingRow = existing as any;
+    let catalogId: string;
 
     if (existingRow) {
+      catalogId = existingRow.id;
+      
       // Update usage count
       await supabase
         .from('product_catalog')
         .update({ usage_count: (existingRow.usage_count || 0) + 1 } as never)
-        .eq('id', existingRow.id);
-      
-      // Update or create SKU mapping
-      if (scrapedProduct.sku) {
-        await supabase
-          .from('store_sku_mappings')
-          .upsert({
-            product_catalog_id: existingRow.id,
-            store: scrapedProduct.store,
-            sku: scrapedProduct.sku,
-            store_product_name: scrapedProduct.productName,
-            product_url: scrapedProduct.productUrl,
-            last_price: scrapedProduct.price,
-            last_price_at: new Date().toISOString(),
-          } as never, {
-            onConflict: 'product_catalog_id,store,sku'
-          });
-      }
+        .eq('id', catalogId);
     } else {
-      // Extract category from search term
+      // Create new catalog entry
       const categoryPatterns: Record<string, string[]> = {
         'Drywall': ['drywall', 'sheetrock', 'gypsum'],
         'Lumber': ['2x4', '2x6', '2x8', '2x10', '2x12', 'stud', 'lumber', 'board'],
@@ -413,7 +412,6 @@ async function learnFromScrape(
         }
       }
 
-      // Create new catalog entry
       const { data: newEntry } = await supabase
         .from('product_catalog')
         .insert({
@@ -429,25 +427,30 @@ async function learnFromScrape(
         .single();
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const newRow = newEntry as any;
+      catalogId = (newEntry as any)?.id;
+    }
 
-      // Create SKU mapping if we have one
-      if (newRow && scrapedProduct.sku) {
-        await supabase
-          .from('store_sku_mappings')
-          .insert({
-            product_catalog_id: newRow.id,
-            store: scrapedProduct.store,
-            sku: scrapedProduct.sku,
-            store_product_name: scrapedProduct.productName,
-            product_url: scrapedProduct.productUrl,
-            last_price: scrapedProduct.price,
-            last_price_at: new Date().toISOString(),
-          } as never);
-      }
+    // CRITICAL: Update store_sku_mappings (the GLOBAL cache)
+    if (catalogId) {
+      await supabase
+        .from('store_sku_mappings')
+        .upsert({
+          product_catalog_id: catalogId,
+          store: scrapedProduct.store,
+          sku: scrapedProduct.sku || `AUTO_${Date.now()}`,
+          store_product_name: scrapedProduct.productName,
+          product_url: scrapedProduct.productUrl,
+          last_price: scrapedProduct.price,
+          last_price_at: new Date().toISOString(),
+          match_confidence: 0.85,
+        } as never, {
+          onConflict: 'product_catalog_id,store'
+        });
+
+      console.log(`[price-lookup] Updated global cache for ${scrapedProduct.productName} at ${scrapedProduct.store}`);
     }
   } catch (error) {
-    console.error('[price-lookup] Error learning from scrape:', error);
+    console.error('[price-lookup] Error updating global cache:', error);
   }
 }
 
@@ -460,9 +463,6 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // ========================================
-  // SECURITY: Authenticate
-  // ========================================
   const auth = await authenticateRequest(req);
   
   if (!auth.authenticated || !auth.userId) {
@@ -479,7 +479,7 @@ serve(async (req) => {
     const { 
       items, 
       projectId,
-      zipCode = '02903', // Default to Providence, RI
+      zipCode = '02903',
       stores = ['Home Depot', "Lowe's"],
       forceRefresh = false
     } = await req.json() as PriceLookupRequest;
@@ -488,39 +488,87 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ success: false, error: 'No items provided' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    );
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Check rate limit
-    const rateLimit = await checkAndUpdateRateLimit(userId);
-    
-    if (!rateLimit.allowed) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: rateLimit.error,
-          rateLimitExceeded: true,
-          remaining: 0
-        }),
-        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     const results: Record<string, PriceResult[]> = {};
     const itemsToProcess = items.slice(0, MAX_ITEMS_PER_REQUEST);
+    let scrapesPerformed = 0;
 
-    console.log('[price-lookup] Processing', itemsToProcess.length, 'items for user:', userId);
+    console.log('[price-lookup] Processing', itemsToProcess.length, 'items. forceRefresh:', forceRefresh);
 
     for (const item of itemsToProcess) {
       const searchTerm = normalizeSearchTerm(item);
       const itemResults: PriceResult[] = [];
+      let needsScrape = forceRefresh;
 
       // ========================================
-      // PRIORITY 1: User's Price Book
+      // PRIORITY 1: Global Cache (store_sku_mappings)
+      // This is the KEY cost-saving mechanism - shared across ALL users
+      // ========================================
+      const { data: catalogItems } = await supabase
+        .from('product_catalog')
+        .select(`
+          id,
+          canonical_key,
+          display_name,
+          default_unit,
+          category,
+          store_sku_mappings (
+            id,
+            store,
+            sku,
+            store_product_name,
+            product_url,
+            last_price,
+            last_price_at,
+            match_confidence
+          )
+        `)
+        .or(`canonical_key.ilike.%${searchTerm.replace(/\s+/g, '_')}%,display_name.ilike.%${searchTerm}%`)
+        .limit(5);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (catalogItems && (catalogItems as any[]).length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const cat of catalogItems as any[]) {
+          for (const mapping of (cat.store_sku_mappings || [])) {
+            const status = getCacheStatus(mapping.last_price_at);
+            
+            // If we have stale data and forceRefresh, mark for scrape
+            if (status === 'stale' && forceRefresh) {
+              needsScrape = true;
+            }
+            
+            // Return cached price regardless (UI will show status indicator)
+            itemResults.push({
+              source: 'global_cache',
+              status,
+              price: mapping.last_price,
+              unit: cat.default_unit || 'EA',
+              productName: mapping.store_product_name || cat.display_name,
+              confidence: mapping.match_confidence || 0.85,
+              matchType: mapping.sku ? 'sku' : 'strict',
+              note: status === 'verified' 
+                ? `✓ Verified (${mapping.store}) - Updated ${new Date(mapping.last_price_at).toLocaleDateString()}`
+                : `⏱ Stale cache - Click refresh for live price`,
+              productUrl: mapping.product_url || undefined,
+              sku: mapping.sku || undefined,
+              store: mapping.store,
+              lastUpdated: mapping.last_price_at,
+              catalogId: cat.id,
+              mappingId: mapping.id,
+            });
+          }
+        }
+      }
+
+      // ========================================
+      // PRIORITY 2: User's Price Book (always trusted)
       // ========================================
       const { data: priceBookItems } = await supabase
         .from('price_book')
@@ -533,207 +581,116 @@ serve(async (req) => {
         for (const pb of priceBookItems) {
           itemResults.push({
             source: 'price_book',
+            status: 'verified',
             price: pb.unit_cost,
             unit: pb.unit || 'EA',
             productName: pb.item_name,
             confidence: 0.98,
             matchType: 'strict',
-            note: pb.vendor ? `Verified price from ${pb.vendor}` : 'From your price book',
+            note: pb.vendor ? `✓ Your verified price (${pb.vendor})` : '✓ From your price book',
             lastUpdated: pb.updated_at,
           });
         }
       }
 
       // ========================================
-      // PRIORITY 2: Product Catalog with SKU Mappings
+      // PRIORITY 3: Fresh Scrape (ONLY if forceRefresh AND no fresh cache)
       // ========================================
-      const { data: catalogItems } = await supabase
-        .from('product_catalog')
-        .select(`
-          *,
-          store_sku_mappings (
-            store,
-            sku,
-            store_product_name,
-            product_url,
-            last_price,
-            last_price_at,
-            match_confidence
-          )
-        `)
-        .or(`canonical_key.ilike.%${searchTerm.replace(/\s+/g, '_')}%,display_name.ilike.%${searchTerm}%`)
-        .limit(3);
+      const hasFreshCache = itemResults.some(r => r.source === 'global_cache' && r.status === 'verified');
+      const hasPriceBook = itemResults.some(r => r.source === 'price_book');
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if (catalogItems && (catalogItems as any[]).length > 0) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        for (const cat of catalogItems as any[]) {
-          for (const mapping of (cat.store_sku_mappings || [])) {
-            if (mapping.last_price) {
-              itemResults.push({
-                source: 'product_catalog',
-                price: mapping.last_price,
-                unit: cat.default_unit || 'EA',
-                productName: mapping.store_product_name || cat.display_name,
-                confidence: mapping.match_confidence || 0.85,
-                matchType: mapping.sku ? 'sku' : 'strict',
-                note: `${mapping.store} - SKU: ${mapping.sku || 'N/A'}`,
-                productUrl: mapping.product_url || undefined,
-                sku: mapping.sku || undefined,
-                store: mapping.store,
-                lastUpdated: mapping.last_price_at,
-              });
-            }
+      if (forceRefresh && !hasFreshCache && !hasPriceBook && scrapesPerformed < 3) {
+        // Check rate limit before scraping
+        const rateLimit = await checkAndUpdateRateLimit(userId);
+        
+        if (rateLimit.allowed) {
+          console.log('[price-lookup] Scraping for:', item);
+          
+          const scraped = await scrapeStorePrices(item, zipCode, stores);
+          scrapesPerformed++;
+          
+          for (const s of scraped) {
+            const specs = extractProductSpecs(item);
+            const confidence = calculateMatchConfidence(item, s.productName, specs);
+            const matchType: 'sku' | 'strict' | 'fuzzy' = s.sku ? 'sku' : (confidence > 0.7 ? 'strict' : 'fuzzy');
+            
+            itemResults.push({
+              source: 'scraped_fresh',
+              status: 'verified',
+              price: s.price,
+              unit: s.unit,
+              productName: s.productName,
+              confidence,
+              matchType,
+              note: `✓ Fresh from ${s.store}`,
+              productUrl: s.productUrl || undefined,
+              sku: s.sku || undefined,
+              store: s.store,
+              inStock: s.inStock,
+              lastUpdated: new Date().toISOString(),
+            });
+
+            // Update global cache for next user (async)
+            updateGlobalCache(item, s).catch(console.error);
           }
+        } else {
+          console.log('[price-lookup] Rate limited, skipping scrape');
         }
       }
 
       // ========================================
-      // PRIORITY 3: Valid Cached Suggestions
+      // PRIORITY 4: Knowledge Base (fallback benchmarks)
       // ========================================
-      const now = new Date().toISOString();
-      
-      if (!forceRefresh) {
-        const { data: cachedSuggestions } = await supabase
-          .from('price_suggestions')
+      if (itemResults.length === 0) {
+        const { data: knowledgeItems } = await supabase
+          .from('construction_knowledge')
           .select('*')
-          .eq('user_id', userId)
-          .ilike('search_term', `%${searchTerm}%`)
-          .gt('expires_at', now)
-          .eq('status', 'pending')
-          .order('scraped_at', { ascending: false })
-          .limit(3);
+          .eq('knowledge_type', 'material_cost')
+          .ilike('key', `%${searchTerm.replace(/\s+/g, '_')}%`)
+          .limit(2);
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if (cachedSuggestions && (cachedSuggestions as any[]).length > 0) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          for (const sug of cachedSuggestions as any[]) {
+        if (knowledgeItems && knowledgeItems.length > 0) {
+          for (const k of knowledgeItems) {
             itemResults.push({
-              source: 'scraped_suggestion',
-              price: sug.price,
-              unit: sug.unit || 'EA',
-              productName: sug.product_name || item,
-              confidence: sug.match_confidence || 0.6,
-              matchType: sug.match_type as 'sku' | 'strict' | 'fuzzy' | 'none',
-              note: `⚠️ SUGGESTION from ${sug.source} - verify before using`,
-              productUrl: sug.product_url || undefined,
-              sku: sug.sku || undefined,
-              store: sug.source,
-              inStock: sug.in_stock,
-              suggestionId: sug.id,
-              lastUpdated: sug.scraped_at,
+              source: 'knowledge_base',
+              status: 'stale',
+              price: k.value,
+              unit: k.unit || 'EA',
+              productName: k.display_name,
+              confidence: k.confidence_score || 0.5,
+              matchType: 'fuzzy',
+              note: k.region ? `⚠️ Benchmark (${k.region})` : '⚠️ Historical benchmark',
+              lastUpdated: k.updated_at,
             });
           }
         }
       }
 
-      // ========================================
-      // PRIORITY 4: Fresh Scrape (if needed and no cached suggestions)
-      // ========================================
-      const hasSuggestions = itemResults.some(r => r.source === 'scraped_suggestion');
-      const hasPriceBookPrice = itemResults.some(r => r.source === 'price_book');
-      
-      if (!hasSuggestions && !hasPriceBookPrice && (forceRefresh || itemResults.length < 2)) {
-        console.log('[price-lookup] Scraping for:', item);
-        
-        const scraped = await scrapeStorePrices(item, zipCode, stores);
-        
-        for (const s of scraped) {
-          const specs = extractProductSpecs(item);
-          const confidence = calculateMatchConfidence(item, s.productName, specs);
-          const matchType: 'sku' | 'strict' | 'fuzzy' = s.sku ? 'sku' : (confidence > 0.7 ? 'strict' : 'fuzzy');
-          
-          // Save as suggestion
-          const { data: newSuggestion } = await supabase
-            .from('price_suggestions')
-            .insert({
-              user_id: userId,
-              project_id: projectId,
-              search_term: item,
-              match_type: matchType,
-              match_confidence: confidence,
-              source: s.store,
-              zip_code: zipCode,
-              price: s.price,
-              unit: s.unit,
-              product_name: s.productName,
-              product_url: s.productUrl,
-              sku: s.sku,
-              in_stock: s.inStock,
-              raw_response: s.rawData,
-              status: 'pending',
-            } as never)
-            .select('id')
-            .single();
-
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const newRow = newSuggestion as any;
-
-          itemResults.push({
-            source: 'scraped_suggestion',
-            price: s.price,
-            unit: s.unit,
-            productName: s.productName,
-            confidence,
-            matchType,
-            note: `⚠️ NEW SUGGESTION from ${s.store} - verify before using`,
-            productUrl: s.productUrl || undefined,
-            sku: s.sku || undefined,
-            store: s.store,
-            inStock: s.inStock,
-            suggestionId: newRow?.id,
-            lastUpdated: now,
-          });
-
-          // Learn from scrape (async, don't wait)
-          learnFromScrape(item, s).catch(console.error);
-        }
-      }
-
-      // ========================================
-      // PRIORITY 5: Construction Knowledge Base
-      // ========================================
-      const { data: knowledgeItems } = await supabase
-        .from('construction_knowledge')
-        .select('*')
-        .eq('knowledge_type', 'material_cost')
-        .ilike('key', `%${searchTerm.replace(/\s+/g, '_')}%`)
-        .limit(2);
-
-      if (knowledgeItems && knowledgeItems.length > 0) {
-        for (const k of knowledgeItems) {
-          itemResults.push({
-            source: 'knowledge_base',
-            price: k.value,
-            unit: k.unit || 'EA',
-            productName: k.display_name,
-            confidence: k.confidence_score || 0.5,
-            matchType: 'fuzzy',
-            note: k.region ? `Regional benchmark (${k.region})` : 'Historical benchmark - may be outdated',
-            lastUpdated: k.updated_at,
-          });
-        }
-      }
-
-      // No results - add helpful message
+      // No results at all
       if (itemResults.length === 0) {
         itemResults.push({
           source: 'knowledge_base',
+          status: 'unknown',
           price: null,
           unit: 'EA',
           productName: item,
           confidence: 0,
           matchType: 'none',
-          note: 'No pricing found. Add to your price book or click "Refresh Prices" to search stores.',
+          note: '❓ No pricing found - Click refresh to search stores',
         });
       }
 
-      // Sort by confidence
-      itemResults.sort((a, b) => b.confidence - a.confidence);
+      // Sort: verified first, then by confidence
+      itemResults.sort((a, b) => {
+        if (a.status === 'verified' && b.status !== 'verified') return -1;
+        if (b.status === 'verified' && a.status !== 'verified') return 1;
+        return b.confidence - a.confidence;
+      });
+      
       results[item] = itemResults;
     }
 
-    console.log('[price-lookup] Completed. Processed', Object.keys(results).length, 'items. Remaining lookups today:', rateLimit.remaining);
+    console.log('[price-lookup] Completed. Items:', Object.keys(results).length, 'Scrapes:', scrapesPerformed);
 
     return new Response(
       JSON.stringify({ 
@@ -741,11 +698,11 @@ serve(async (req) => {
         results,
         meta: {
           itemsProcessed: itemsToProcess.length,
-          lookupsRemaining: rateLimit.remaining,
+          scrapesPerformed,
           zipCode,
           stores,
+          cacheInfo: `Prices from global cache are shared across all users. Click refresh for live store prices.`,
         },
-        note: 'Prices from price book are verified. Scraped suggestions require confirmation before use.',
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
