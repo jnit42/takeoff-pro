@@ -46,11 +46,13 @@ interface ProjectContext {
   // Combined site difficulty multiplier
   siteDifficultyMultiplier?: number;
   takeoffItems?: Array<{
+    id: string;
     description: string;
     quantity: number;
     unit: string;
     unit_cost: number;
     category: string;
+    draft: boolean;
   }>;
   laborEstimates?: Array<{
     task_name: string;
@@ -358,10 +360,10 @@ async function buildProjectContext(supabase: any, projectId: string | null, user
     context.siteDifficultyMultiplier = accessMultiplier * occupancyMultiplier * parkingMultiplier;
   }
 
-  // Get takeoff items
+  // Get takeoff items - INCLUDE ID so AI can reference for updates/deletes
   const { data: takeoffItems } = await supabase
     .from('takeoff_items')
-    .select('description, quantity, unit, unit_cost, category')
+    .select('id, description, quantity, unit, unit_cost, category, draft')
     .eq('project_id', projectId)
     .limit(50);
   
@@ -537,7 +539,10 @@ ${siteDifficultyInfo}`
     : 'No project currently selected.';
 
   const existingItems = projectContext.takeoffItems?.length
-    ? `\nEXISTING TAKEOFF ITEMS (${projectContext.takeoffItems.length} items):\n${projectContext.takeoffItems.slice(0, 10).map(i => `- ${i.description}: ${i.quantity} ${i.unit} @ $${i.unit_cost || '?'}`).join('\n')}`
+    ? `\nEXISTING TAKEOFF ITEMS (${projectContext.takeoffItems.length} items):
+${projectContext.takeoffItems.slice(0, 15).map(i => `- [ID: ${i.id}] ${i.description}: ${i.quantity} ${i.unit} @ $${i.unit_cost || 'TBD'}${i.draft ? ' (draft)' : ''}`).join('\n')}
+
+NOTE: When updating or deleting items, you MUST use the item_id from above. Example: item_id = "${projectContext.takeoffItems[0]?.id || 'uuid-here'}"`
     : '';
 
   const subInfo = projectContext.subcontractors?.length
@@ -689,7 +694,13 @@ function buildToolDefinitions() {
                   },
                   params: { 
                     type: 'object',
-                    description: 'For takeoff.add_item use: description, quantity, unit, unit_cost, category. For takeoff.delete_item use: description or item_id. For export use: which (takeoff/labor/rfis).'
+                    description: `Action parameters:
+- takeoff.add_item: {description, quantity, unit, unit_cost, category}
+- takeoff.add_multiple: {items: [{description, quantity, unit, category}]}
+- takeoff.update_item: {item_id: "REQUIRED - use ID from EXISTING TAKEOFF ITEMS list", description?, quantity?, unit?, unit_cost?}
+- takeoff.delete_item: {item_id: "REQUIRED - use ID from EXISTING TAKEOFF ITEMS list"}
+- takeoff.delete_items: {item_ids: ["id1", "id2"]}
+- export.pdf/csv: {which: "takeoff" | "labor" | "rfis"}`
                   },
                   confidence: { type: 'number', minimum: 0, maximum: 1 }
                 },
