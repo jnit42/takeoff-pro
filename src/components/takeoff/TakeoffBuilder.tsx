@@ -58,7 +58,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { TAKEOFF_CATEGORIES, UNITS, formatCurrency, formatNumber } from '@/lib/constants';
+import { TAKEOFF_CATEGORIES, UNITS, formatCurrency, formatNumber, formatQuantity } from '@/lib/constants';
 
 interface TakeoffItem {
   id: string;
@@ -942,7 +942,7 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                               return (
                               <TableRow 
                                 key={item.id}
-                                className={item.draft ? 'bg-warning/5' : ''}
+                                className={item.draft ? 'bg-amber-50/40 dark:bg-amber-900/10 border-l-2 border-l-amber-400' : ''}
                               >
                                 <TableCell className="min-w-[180px]">
                                   <div className="flex items-center gap-2">
@@ -952,11 +952,6 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                                         onCheckedChange={() => toggleSelectItem(item.id)}
                                         className="shrink-0"
                                       />
-                                    )}
-                                    {item.draft && (
-                                      <Badge variant="outline" className="bg-warning/20 text-warning border-warning/50 text-xs shrink-0">
-                                        Draft
-                                      </Badge>
                                     )}
                                     <Input
                                       value={item.description}
@@ -1018,7 +1013,7 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                                   />
                                 </TableCell>
                                 <TableCell className="text-right font-mono text-muted-foreground">
-                                  {formatNumber(item.adjusted_qty || 0, 2)}
+                                  {formatQuantity(item.adjusted_qty, item.unit)}
                                 </TableCell>
                                 <TableCell>
                                   <Input
@@ -1031,7 +1026,7 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                                   />
                                 </TableCell>
                                 <TableCell className="text-right font-mono text-muted-foreground">
-                                  {item.packages || 0}
+                                  {formatQuantity(item.packages, item.unit)}
                                 </TableCell>
                                 <TableCell>
                                   <div className="flex items-center gap-1">

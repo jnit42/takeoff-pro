@@ -126,9 +126,12 @@ export const REGIONS = [
   'Maine',
 ] as const;
 
-// Format currency
+// Units that should be rounded up to whole numbers
+const WHOLE_NUMBER_UNITS = ['EA', 'SHT', 'BOX', 'ROLL', 'BF'] as const;
+
+// Format currency - show "TBD" for null/zero
 export const formatCurrency = (value: number | null | undefined, currency = 'USD'): string => {
-  if (value == null) return '$0.00';
+  if (value == null || value === 0) return '—';
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
@@ -143,6 +146,25 @@ export const formatNumber = (value: number | null | undefined, decimals = 2): st
   return new Intl.NumberFormat('en-US', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
+  }).format(value);
+};
+
+// Format quantity based on unit type - whole numbers for EA/SHT/BOX, decimals for LF/SF
+export const formatQuantity = (value: number | null | undefined, unit: string): string => {
+  if (value == null || value === 0) return '0';
+  
+  // Round up for countable units
+  if (WHOLE_NUMBER_UNITS.includes(unit as typeof WHOLE_NUMBER_UNITS[number]) || 
+      unit.toUpperCase() === 'STUD' || 
+      unit.toUpperCase() === 'PC' || 
+      unit.toUpperCase() === 'PKG') {
+    return Math.ceil(value).toLocaleString('en-US');
+  }
+  
+  // 2 decimal places for measurement units
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(value);
 };
 
