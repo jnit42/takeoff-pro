@@ -461,6 +461,8 @@ function TaskForm({
 }
 
 function TemplatesContent() {
+  const { toast } = useToast();
+  
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ['templates'],
     queryFn: async () => {
@@ -469,6 +471,13 @@ function TemplatesContent() {
       return data as Template[];
     },
   });
+
+  const handleUseTemplate = (templateName: string) => {
+    toast({
+      title: 'Template feature coming soon',
+      description: `"${templateName}" will be available to apply to projects in a future update.`,
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -514,7 +523,12 @@ function TemplatesContent() {
                       System
                     </span>
                   )}
-                  <Button variant="ghost" size="sm" className="ml-auto gap-2">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="ml-auto gap-2"
+                    onClick={() => handleUseTemplate(template.name)}
+                  >
                     Use Template
                     <ArrowRight className="h-4 w-4" />
                   </Button>
