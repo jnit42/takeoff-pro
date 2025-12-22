@@ -128,9 +128,17 @@ function inferUnit(description: string, quantity: number): string {
   return 'EA';
 }
 
+interface LearnedRate {
+  task_key: string;
+  trade: string;
+  rate: number;
+  unit: string;
+  description: string;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function learnLaborRatesFromReceipt(supabase: any, userId: string, lineItems: ExtractedLineItem[]): Promise<number> {
-  let learnedCount = 0;
+async function learnLaborRatesFromReceipt(supabase: any, userId: string, lineItems: ExtractedLineItem[]): Promise<LearnedRate[]> {
+  const learnedRates: LearnedRate[] = [];
 
   for (const item of lineItems) {
     if (!isLaborItem(item.description)) continue;
@@ -173,24 +181,41 @@ async function learnLaborRatesFromReceipt(supabase: any, userId: string, lineIte
         // Weighted average of rates
         const newSampleCount = (existing.sample_count || 1) + 1;
         const newRate = ((existing.base_rate * (existing.sample_count || 1)) + item.unit_price) / newSampleCount;
+        const roundedRate = Math.round(newRate * 100) / 100;
 
         await supabase
           .from('labor_rate_calibration')
           .update({
-            base_rate: Math.round(newRate * 100) / 100,
+            base_rate: roundedRate,
             sample_count: newSampleCount,
             last_used_at: new Date().toISOString(),
           })
           .eq('user_id', userId)
           .eq('trade', trade)
           .eq('task_key', taskKey);
-      }
-    }
 
-    learnedCount++;
+        // Use the averaged rate for the response
+        learnedRates.push({
+          task_key: taskKey,
+          trade,
+          rate: roundedRate,
+          unit,
+          description: item.description
+        });
+      }
+    } else {
+      // New rate inserted
+      learnedRates.push({
+        task_key: taskKey,
+        trade,
+        rate: item.unit_price,
+        unit,
+        description: item.description
+      });
+    }
   }
 
-  return learnedCount;
+  return learnedRates;
 }
 
 serve(async (req) => {
@@ -392,11 +417,11 @@ RESPOND WITH VALID JSON ONLY:
     // ========================================
     // NEW: Learn labor rates from receipt
     // ========================================
-    let learnedRatesCount = 0;
+    let learnedRates: LearnedRate[] = [];
     if (extracted.line_items && extracted.line_items.length > 0) {
-      learnedRatesCount = await learnLaborRatesFromReceipt(supabase, userId, extracted.line_items);
-      if (learnedRatesCount > 0) {
-        console.log(`[receipt-ocr] Learned ${learnedRatesCount} labor rates from receipt`);
+      learnedRates = await learnLaborRatesFromReceipt(supabase, userId, extracted.line_items);
+      if (learnedRates.length > 0) {
+        console.log(`[receipt-ocr] Learned ${learnedRates.length} labor rates from receipt:`, learnedRates);
       }
     }
 
@@ -431,7 +456,8 @@ RESPOND WITH VALID JSON ONLY:
       JSON.stringify({ 
         success: true, 
         data: extracted,
-        learned_rates: learnedRatesCount
+        learned_rates: learnedRates,
+        learned_count: learnedRates.length
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

@@ -568,6 +568,14 @@ CORE PRINCIPLES (from the field):
 5. SANITY CHECK - If studs are costing $10 each, something's wrong. Flag it.
 6. ADMIT UNCERTAINTY - "I'm 60% confident" is honest. Fake certainty loses jobs.
 7. LEARN FROM USER - If user has calibrated rates or corrected you before, USE THEIR DATA.
+8. VALUE ENGINEERING (MANDATORY):
+   - You are not just an estimator; you are a Profit Optimizer.
+   - ALWAYS check for savings opportunities > 10%.
+   - Example: If user specifies 'Copper Pipe', check code for PEX. If PEX is compliant AND 30%+ cheaper, suggest it as an 'Optimization Option'.
+   - Example: If framing is standard, check if 24-inch OC is allowed for non-load bearing walls (saves ~33% on studs).
+   - Example: For decks, compare composite vs pressure-treated lumber if appearance isn't critical.
+   - Output these suggestions clearly labeled as '💡 Value Engineering Opportunity: [description] - Potential Savings: $X or X%'
+   - NEVER sacrifice code compliance for savings. Safety first, then savings.
 
 REGIONAL MULTIPLIERS (baked into estimates):
 - Northeast/MA/CT/NY: 1.25-1.35x labor (union markets, prevailing wage)
@@ -714,10 +722,105 @@ function buildToolDefinitions() {
 }
 
 // ========================================
-// BUILDING CODE SEARCH (Real Implementation)
+// BUILDING CODE SEARCH (Real Implementation with Cache)
 // ========================================
 
-async function searchBuildingCodes(query: string, zipCode: string, codeType?: string): Promise<{ found: boolean; snippet: string; source: string }> {
+// Simple hash function for caching
+async function hashQuery(text: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(text.toLowerCase().trim());
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Cache operations using direct REST API to avoid type issues
+async function checkBuildingCodeCache(queryHash: string, zipCode: string): Promise<{ snippet: string; source_url: string } | null> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  
+  try {
+    const response = await fetch(
+      `${supabaseUrl}/rest/v1/building_code_cache?query_hash=eq.${encodeURIComponent(queryHash)}&zip_code=eq.${encodeURIComponent(zipCode)}&expires_at=gt.${new Date().toISOString()}&select=snippet,source_url`,
+      {
+        headers: {
+          'apikey': supabaseServiceKey,
+          'Authorization': `Bearer ${supabaseServiceKey}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    
+    if (!response.ok) return null;
+    
+    const rows = await response.json();
+    if (rows && rows.length > 0) {
+      return rows[0];
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function saveBuildingCodeCache(queryHash: string, zipCode: string, queryText: string, snippet: string, sourceUrl: string): Promise<void> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  
+  try {
+    await fetch(
+      `${supabaseUrl}/rest/v1/building_code_cache`,
+      {
+        method: 'POST',
+        headers: {
+          'apikey': supabaseServiceKey,
+          'Authorization': `Bearer ${supabaseServiceKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          query_hash: queryHash,
+          zip_code: zipCode,
+          query_text: queryText,
+          snippet: snippet,
+          source_url: sourceUrl,
+          expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
+        }),
+      }
+    );
+    console.log('[construction-brain] Building code cached for future use');
+  } catch (cacheError) {
+    console.error('[construction-brain] Failed to cache code:', cacheError);
+  }
+}
+
+async function searchBuildingCodes(
+  query: string, 
+  zipCode: string, 
+  codeType?: string
+): Promise<{ found: boolean; snippet: string; source: string; cached: boolean }> {
+  
+  // ========================================
+  // CACHE-FIRST: Check building_code_cache
+  // ========================================
+  const queryHash = await hashQuery(query + (codeType || 'IRC'));
+  
+  const cached = await checkBuildingCodeCache(queryHash, zipCode);
+  if (cached) {
+    console.log('[construction-brain] Building code cache HIT:', queryHash);
+    return {
+      found: true,
+      snippet: cached.snippet,
+      source: cached.source_url || 'cached',
+      cached: true
+    };
+  }
+  
+  console.log('[construction-brain] Building code cache MISS:', queryHash);
+  
+  // ========================================
+  // CACHE MISS: Perform Firecrawl search
+  // ========================================
   const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
   
   if (!FIRECRAWL_API_KEY) {
@@ -725,7 +828,8 @@ async function searchBuildingCodes(query: string, zipCode: string, codeType?: st
     return {
       found: false,
       snippet: 'Building code lookup not configured. Please verify requirements manually with local building department.',
-      source: 'fallback'
+      source: 'fallback',
+      cached: false
     };
   }
 
@@ -756,7 +860,8 @@ async function searchBuildingCodes(query: string, zipCode: string, codeType?: st
       return {
         found: false,
         snippet: 'Building code search failed. Verify requirements with local building department.',
-        source: 'error'
+        source: 'error',
+        cached: false
       };
     }
 
@@ -764,6 +869,7 @@ async function searchBuildingCodes(query: string, zipCode: string, codeType?: st
     
     if (result.data && result.data.length > 0) {
       // Extract relevant snippets
+      const firstResult = result.data[0];
       const snippets = result.data
         .slice(0, 2)
         .map((r: { markdown?: string; title?: string; url?: string }) => {
@@ -774,24 +880,32 @@ async function searchBuildingCodes(query: string, zipCode: string, codeType?: st
         })
         .join('\n\n---\n\n');
       
+      // ========================================
+      // SAVE TO CACHE (90-day expiry)
+      // ========================================
+      await saveBuildingCodeCache(queryHash, zipCode, query, snippets, firstResult.url || 'up.codes');
+      
       return {
         found: true,
         snippet: snippets,
-        source: 'up.codes'
+        source: 'up.codes',
+        cached: false
       };
     }
     
     return {
       found: false,
       snippet: `No specific code found for "${query}" in ${zipCode}. Check local amendments with building department.`,
-      source: 'up.codes'
+      source: 'up.codes',
+      cached: false
     };
   } catch (error) {
     console.error('[construction-brain] Building code search error:', error);
     return {
       found: false,
       snippet: 'Building code lookup failed. Verify requirements manually.',
-      source: 'error'
+      source: 'error',
+      cached: false
     };
   }
 }

@@ -413,6 +413,39 @@ export type Database = {
           },
         ]
       }
+      building_code_cache: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          query_hash: string
+          query_text: string
+          snippet: string
+          source_url: string | null
+          zip_code: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          query_hash: string
+          query_text: string
+          snippet: string
+          source_url?: string | null
+          zip_code: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          query_hash?: string
+          query_text?: string
+          snippet?: string
+          source_url?: string | null
+          zip_code?: string
+        }
+        Relationships: []
+      }
       checklist_items: {
         Row: {
           created_at: string
