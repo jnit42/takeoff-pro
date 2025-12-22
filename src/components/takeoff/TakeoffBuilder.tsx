@@ -949,7 +949,7 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                                     )}
                                   </TableCell>
                                 )}
-                                <TableCell>
+                                <TableCell className="min-w-[200px]">
                                   <div className="flex items-center gap-2">
                                     {item.draft && (
                                       <Badge variant="outline" className="bg-warning/20 text-warning border-warning/50 text-xs shrink-0">
@@ -961,7 +961,8 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                                       onChange={(e) =>
                                         handleInputChange(item.id, 'description', e.target.value)
                                       }
-                                      className="h-8"
+                                      className="h-8 min-w-[150px] flex-1"
+                                      placeholder="Enter description..."
                                     />
                                   </div>
                                 </TableCell>
