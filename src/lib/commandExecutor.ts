@@ -421,7 +421,7 @@ async function executeTakeoffAddItem(
       unit: (params.unit as string) || 'EA',
       quantity,
       unit_cost: unitCost,
-      extended_cost: unitCost !== null ? quantity * unitCost : null,
+      // Note: extended_cost is a generated column, don't insert it
       draft: (params.draft as boolean) ?? true, // Default to draft for AI-generated
       notes: params.notes as string,
     })
@@ -488,7 +488,7 @@ async function executeTakeoffAddMultiple(
       unit: item.unit || 'EA',
       quantity: qty,
       unit_cost: cost,
-      extended_cost: cost !== null ? qty * cost : null,
+      // Note: extended_cost is a generated column, don't insert it
       draft: true, // Always create as drafts so user can review
       notes: item.notes || null,
     };
