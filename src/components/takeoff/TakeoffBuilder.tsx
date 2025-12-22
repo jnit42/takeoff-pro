@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Plus, 
@@ -15,7 +15,8 @@ import {
   Check,
   Clock,
   HelpCircle,
-  ExternalLink
+  ExternalLink,
+  List
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -174,7 +175,7 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
   });
 
   // Update price status when initial prices load
-  useState(() => {
+  useEffect(() => {
     if (initialPrices?.results) {
       const newStatus: Record<string, ItemPriceStatus> = {};
       for (const [desc, results] of Object.entries(initialPrices.results as Record<string, PriceResult[]>)) {
@@ -192,7 +193,7 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
       }
       setItemPriceStatus(prev => ({ ...prev, ...newStatus }));
     }
-  });
+  }, [initialPrices, items]);
 
   // Single item price refresh (triggers scrape)
   const refreshSinglePrice = async (item: TakeoffItem) => {
@@ -204,6 +205,7 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
           items: [item.description],
           zipCode: projectData?.zip_code || undefined,
           forceRefresh: true, // This triggers scraping
+          projectId: projectId,
         }
       });
       
@@ -212,6 +214,30 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
       if (data.success && data.results?.[item.description]) {
         const results = data.results[item.description] as PriceResult[];
         setPriceResults(prev => ({ ...prev, [item.description]: results }));
+        
+        // Save all results to price_suggestions for later viewing
+        for (const result of results) {
+          if (result.price) {
+            try {
+              await supabase.from('price_suggestions').insert({
+                search_term: item.description,
+                takeoff_item_id: item.id,
+                project_id: projectId,
+                source: result.store || result.source || 'unknown',
+                match_type: result.source,
+                price: result.price,
+                product_name: result.productName,
+                product_url: result.productUrl || null,
+                unit: result.unit,
+                match_confidence: result.confidence,
+                status: 'pending',
+                expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+              });
+            } catch {
+              // Silent insert failure
+            }
+          }
+        }
         
         const best = results[0];
         if (best) {
@@ -273,6 +299,7 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
             items: batch.map(item => item.description),
             zipCode: projectData?.zip_code || undefined,
             forceRefresh: true, // Trigger live scraping
+            projectId: projectId, // Pass project ID for storing suggestions
           }
         });
         
@@ -280,6 +307,33 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
           for (const item of batch) {
             const results = data.results[item.description] as PriceResult[] | undefined;
             if (results && results.length > 0) {
+              // Store all results for later viewing
+              setPriceResults(prev => ({ ...prev, [item.description]: results }));
+              
+              // Save all results to price_suggestions for this item
+              for (const result of results) {
+                if (result.price) {
+                  try {
+                    await supabase.from('price_suggestions').insert({
+                      search_term: item.description,
+                      takeoff_item_id: item.id,
+                      project_id: projectId,
+                      source: result.store || result.source || 'unknown',
+                      match_type: result.source,
+                      price: result.price,
+                      product_name: result.productName,
+                      product_url: result.productUrl || null,
+                      unit: result.unit,
+                      match_confidence: result.confidence,
+                      status: 'pending',
+                      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+                    });
+                  } catch {
+                    // Silent insert failure
+                  }
+                }
+              }
+              
               const best = results.find(r => r.price !== null);
               if (best && best.price) {
                 // Auto-apply the best price
@@ -287,7 +341,8 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                   .from('takeoff_items')
                   .update({ 
                     unit_cost: best.price, 
-                    vendor: best.store || 'Store Lookup' 
+                    vendor: best.store || 'Store Lookup',
+                    product_url: best.productUrl || null
                   })
                   .eq('id', item.id);
                 
@@ -313,11 +368,40 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
 
     setIsBulkPricing(false);
     queryClient.invalidateQueries({ queryKey: ['takeoff-items', projectId] });
+    queryClient.invalidateQueries({ queryKey: ['price-suggestions', projectId] });
     
     toast({ 
       title: 'Price lookup complete', 
-      description: `Updated ${successCount} of ${itemsNeedingPrice.length} items` 
+      description: `Updated ${successCount} of ${itemsNeedingPrice.length} items. All matches saved for review.` 
     });
+  };
+
+  // View saved price suggestions for an item
+  const viewSavedPrices = async (item: TakeoffItem) => {
+    const { data: suggestions } = await supabase
+      .from('price_suggestions')
+      .select('*')
+      .eq('takeoff_item_id', item.id)
+      .order('price', { ascending: true });
+    
+    if (suggestions && suggestions.length > 0) {
+      const results: PriceResult[] = suggestions.map(s => ({
+        source: s.match_type as PriceResult['source'],
+        status: s.status === 'accepted' ? 'verified' : 'stale',
+        price: s.price,
+        unit: s.unit || 'EA',
+        productName: s.product_name || s.search_term,
+        confidence: s.match_confidence || 0,
+        store: s.source,
+        productUrl: s.product_url || undefined,
+        note: `Scraped: ${new Date(s.scraped_at).toLocaleDateString()}`
+      }));
+      setPriceResults(prev => ({ ...prev, [item.description]: results }));
+      setPriceLookupItem(item);
+    } else {
+      // No saved prices, trigger a fresh lookup
+      refreshSinglePrice(item);
+    }
   };
 
   // Apply price from lookup - now includes product URL
@@ -919,18 +1003,18 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="min-w-[180px]">Description</TableHead>
-                            <TableHead className="w-[80px]">Spec</TableHead>
-                            <TableHead className="w-[70px]">Unit</TableHead>
-                            <TableHead className="w-[70px] text-right">Qty</TableHead>
-                            <TableHead className="w-[60px] text-right">Waste%</TableHead>
-                            <TableHead className="w-[70px] text-right">Adj Qty</TableHead>
-                            <TableHead className="w-[60px] text-right">Pkg Size</TableHead>
-                            <TableHead className="w-[50px] text-right">Pkgs</TableHead>
-                            <TableHead className="w-[110px] text-right">Unit $</TableHead>
-                            <TableHead className="w-[90px] text-right">Extended</TableHead>
-                            <TableHead className="w-[100px]">Vendor</TableHead>
-                            <TableHead className="w-[40px]"></TableHead>
+                            <TableHead className="min-w-[200px]">Description</TableHead>
+                            <TableHead className="w-[80px] min-w-[80px]">Spec</TableHead>
+                            <TableHead className="w-[80px] min-w-[80px]">Unit</TableHead>
+                            <TableHead className="w-[80px] min-w-[80px] text-right">Qty</TableHead>
+                            <TableHead className="w-[80px] min-w-[80px] text-right">Waste%</TableHead>
+                            <TableHead className="w-[80px] min-w-[80px] text-right">Adj Qty</TableHead>
+                            <TableHead className="w-[70px] min-w-[70px] text-right">Pkg Size</TableHead>
+                            <TableHead className="w-[60px] min-w-[60px] text-right">Pkgs</TableHead>
+                            <TableHead className="w-[120px] min-w-[120px] text-right">Unit $</TableHead>
+                            <TableHead className="w-[100px] min-w-[100px] text-right">Extended</TableHead>
+                            <TableHead className="w-[120px] min-w-[120px]">Vendor</TableHead>
+                            <TableHead className="w-[50px]"></TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -992,24 +1076,24 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                                     </SelectContent>
                                   </Select>
                                 </TableCell>
-                                <TableCell>
+                                <TableCell className="min-w-[80px]">
                                   <Input
                                     type="number"
                                     value={item.quantity}
                                     onChange={(e) =>
                                       handleInputChange(item.id, 'quantity', e.target.value)
                                     }
-                                    className="h-8 text-right font-mono"
+                                    className="h-8 text-right font-mono w-full min-w-[60px]"
                                   />
                                 </TableCell>
-                                <TableCell>
+                                <TableCell className="min-w-[80px]">
                                   <Input
                                     type="number"
                                     value={item.waste_percent || 0}
                                     onChange={(e) =>
                                       handleInputChange(item.id, 'waste_percent', e.target.value)
                                     }
-                                    className="h-8 text-right font-mono"
+                                    className="h-8 text-right font-mono w-full min-w-[60px]"
                                   />
                                 </TableCell>
                                 <TableCell className="text-right font-mono text-muted-foreground">
@@ -1028,7 +1112,7 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                                 <TableCell className="text-right font-mono text-muted-foreground">
                                   {formatQuantity(item.packages, item.unit)}
                                 </TableCell>
-                                <TableCell>
+                                <TableCell className="min-w-[120px]">
                                   <div className="flex items-center gap-1">
                                     {/* Status indicator */}
                                     <TooltipProvider>
@@ -1054,8 +1138,25 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                                       onChange={(e) =>
                                         handleInputChange(item.id, 'unit_cost', e.target.value)
                                       }
-                                      className="h-8 text-right font-mono w-20"
+                                      className="h-8 text-right font-mono w-16 min-w-[50px]"
                                     />
+                                    
+                                    {/* View saved prices / History button */}
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7 text-muted-foreground hover:text-primary"
+                                            onClick={() => viewSavedPrices(item)}
+                                          >
+                                            <List className="h-3.5 w-3.5" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>View all price options</TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
                                     
                                     {/* Refresh button - LAZY LOAD per item */}
                                     <TooltipProvider>
@@ -1064,14 +1165,14 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
                                           <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="h-8 w-8 text-muted-foreground hover:text-primary"
+                                            className="h-7 w-7 text-muted-foreground hover:text-primary"
                                             onClick={() => refreshSinglePrice(item)}
                                             disabled={isLoadingThis}
                                           >
                                             {isLoadingThis ? (
-                                              <Loader2 className="h-4 w-4 animate-spin" />
+                                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                             ) : (
-                                              <RefreshCw className="h-4 w-4" />
+                                              <RefreshCw className="h-3.5 w-3.5" />
                                             )}
                                           </Button>
                                         </TooltipTrigger>
