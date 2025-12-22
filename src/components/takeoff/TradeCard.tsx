@@ -24,11 +24,11 @@ import {
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/constants';
 
-// Store logos as simple text badges for now
+// Store logos using semantic tokens
 const STORE_BADGES: Record<string, { bg: string; text: string }> = {
-  "Lowe's": { bg: 'bg-blue-600', text: 'Lowe\'s' },
-  "Home Depot": { bg: 'bg-orange-600', text: 'HD' },
-  "Menards": { bg: 'bg-green-600', text: 'Menards' },
+  "Lowe's": { bg: 'bg-info', text: 'Lowe\'s' },
+  "Home Depot": { bg: 'bg-accent', text: 'HD' },
+  "Menards": { bg: 'bg-success', text: 'Menards' },
 };
 
 interface TakeoffItem {

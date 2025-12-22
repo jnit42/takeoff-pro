@@ -119,6 +119,7 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
+  // Auto-expand all categories on mobile for better UX
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [showDrafts, setShowDrafts] = useState(true);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
@@ -586,6 +587,13 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
     return acc;
   }, {} as Record<string, TakeoffItem[]>);
 
+  // Auto-expand all categories on mobile for better UX
+  useEffect(() => {
+    if (isMobile && Object.keys(itemsByCategory).length > 0 && expandedCategories.size === 0) {
+      setExpandedCategories(new Set(Object.keys(itemsByCategory)));
+    }
+  }, [isMobile, Object.keys(itemsByCategory).length]);
+
   const toggleCategory = (category: string) => {
     const newExpanded = new Set(expandedCategories);
     if (newExpanded.has(category)) {
@@ -792,12 +800,18 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
             />
           ))}
 
-          {/* Empty state */}
+          {/* Empty state - more helpful */}
           {Object.keys(itemsByCategory).length === 0 && (
-            <div className="py-12 text-center">
-              <p className="text-lg font-medium text-muted-foreground mb-2">No items yet</p>
-              <p className="text-sm text-muted-foreground">
-                Tap the <span className="text-primary font-semibold">+</span> button below to describe what you need
+            <div className="py-16 text-center">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
+                <Calculator className="h-8 w-8 text-primary" />
+              </div>
+              <p className="text-lg font-medium mb-2">Start Your Estimate</p>
+              <p className="text-sm text-muted-foreground mb-6 px-8">
+                Tap the <span className="text-primary font-bold">+</span> button below and describe what you need to estimate
+              </p>
+              <p className="text-xs text-muted-foreground/70 italic">
+                Try: "Frame a 10x12 room" or "5x8 bathroom remodel"
               </p>
             </div>
           )}
