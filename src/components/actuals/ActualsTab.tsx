@@ -1,6 +1,7 @@
 /**
  * Actuals Tab Component
  * Main container for all project actuals features
+ * Includes Client Mode toggle to hide sensitive data
  */
 
 import { useState } from 'react';
@@ -10,14 +11,13 @@ import {
   Receipt,
   BarChart3,
   BookOpen,
-  Plus,
   Upload,
   DollarSign,
   History
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -30,6 +30,8 @@ import {
 import { ReceiptUploader } from './ReceiptUploader';
 import { VarianceDashboard } from './VarianceDashboard';
 import { ProjectReviewFlow } from './ProjectReviewFlow';
+import { ClientModeToggle } from '@/components/ui/client-mode-toggle';
+import { useClientMode } from '@/hooks/useClientMode';
 import { cn } from '@/lib/utils';
 
 interface ActualsTabProps {
@@ -41,6 +43,7 @@ interface ActualsTabProps {
 export function ActualsTab({ projectId, projectName, className }: ActualsTabProps) {
   const [activeTab, setActiveTab] = useState<'variance' | 'receipts' | 'review'>('variance');
   const [showUploader, setShowUploader] = useState(false);
+  const { isClientMode } = useClientMode();
 
   // Fetch receipts for this project
   const { data: receipts = [], refetch: refetchReceipts } = useQuery({
@@ -163,24 +166,34 @@ export function ActualsTab({ projectId, projectName, className }: ActualsTabProp
             </TabsTrigger>
           </TabsList>
 
-          <Dialog open={showUploader} onOpenChange={setShowUploader}>
-            <DialogTrigger asChild>
-              <Button size="sm">
-                <Upload className="h-3.5 w-3.5 mr-1.5" />
-                Upload Receipt
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>Upload Receipt</DialogTitle>
-              </DialogHeader>
-              <ReceiptUploader 
-                projectId={projectId} 
-                onUploadComplete={handleUploadComplete}
-              />
-            </DialogContent>
-          </Dialog>
+          <div className="flex items-center gap-2">
+            <ClientModeToggle />
+            <Dialog open={showUploader} onOpenChange={setShowUploader}>
+              <DialogTrigger asChild>
+                <Button size="sm">
+                  <Upload className="h-3.5 w-3.5 mr-1.5" />
+                  Upload Receipt
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Upload Receipt</DialogTitle>
+                </DialogHeader>
+                <ReceiptUploader 
+                  projectId={projectId} 
+                  onUploadComplete={handleUploadComplete}
+                />
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
+
+        {/* Client Mode Banner */}
+        {isClientMode && (
+          <div className="mb-4 p-2 rounded-lg bg-primary/10 border border-primary/20 text-center">
+            <span className="text-xs font-medium text-primary">Client Mode Active - Sensitive data hidden</span>
+          </div>
+        )}
 
         <TabsContent value="variance" className="flex-1 m-0 overflow-auto">
           <VarianceDashboard projectId={projectId} />

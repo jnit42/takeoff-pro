@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, DollarSign, ChevronDown, ChevronUp } from 'lucide-react';
+import { AlertTriangle, DollarSign, ChevronDown, ChevronUp, EyeOff } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { formatCurrency } from '@/lib/constants';
+import { useClientMode } from '@/hooks/useClientMode';
 
 interface CostSummaryProps {
   projectId: string;
@@ -46,6 +47,7 @@ export function CostSummary({ projectId, project }: CostSummaryProps) {
   const [includeDrafts, setIncludeDrafts] = useState(false);
   const [expandMaterials, setExpandMaterials] = useState(false);
   const [expandLabor, setExpandLabor] = useState(false);
+  const { isClientMode } = useClientMode();
 
   const { data: takeoffItems = [] } = useQuery({
     queryKey: ['takeoff-items', projectId],
@@ -241,22 +243,32 @@ export function CostSummary({ projectId, project }: CostSummaryProps) {
             </CollapsibleContent>
           </Collapsible>
 
-          {/* Grand Total Section */}
+          {/* Grand Total Section - hide markup in client mode */}
           <div className="border-t pt-3 space-y-1.5">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Project Subtotal</span>
               <span className="font-mono">{formatCurrency(projectSubtotal)}</span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Markup ({project.markup_percent || 0}%)</span>
-              <span className="font-mono">{formatCurrency(markupAmount)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Total with Markup</span>
-              <span className="font-mono">{formatCurrency(totalWithMarkup)}</span>
-            </div>
+            {!isClientMode && (
+              <>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Markup ({project.markup_percent || 0}%)</span>
+                  <span className="font-mono">{formatCurrency(markupAmount)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Total with Markup</span>
+                  <span className="font-mono">{formatCurrency(totalWithMarkup)}</span>
+                </div>
+              </>
+            )}
+            {isClientMode && (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground py-1">
+                <EyeOff className="h-3 w-3" />
+                <span>Margin details hidden</span>
+              </div>
+            )}
             <div className="flex justify-between font-semibold pt-2 border-t">
-              <span>Final Bid (rounded)</span>
+              <span>Final Bid {!isClientMode && '(rounded)'}</span>
               <span className="font-mono text-accent">{formatCurrency(finalBidPrice)}</span>
             </div>
           </div>

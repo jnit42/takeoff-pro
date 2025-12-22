@@ -1,6 +1,7 @@
 /**
  * Variance Dashboard Component
  * Shows estimate vs actual comparison with deviation analysis
+ * Click variance card to drill down into category breakdown
  */
 
 import { useState, useMemo } from 'react';
@@ -15,7 +16,8 @@ import {
   DollarSign,
   BarChart3,
   Filter,
-  ChevronDown
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -27,6 +29,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { VarianceDrillDown } from './VarianceDrillDown';
 import { cn } from '@/lib/utils';
 
 interface VarianceDashboardProps {
@@ -50,6 +53,7 @@ type CategoryFilter = 'all' | 'material' | 'labor' | 'equipment' | 'subcontracto
 
 export function VarianceDashboard({ projectId, className }: VarianceDashboardProps) {
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
+  const [showDrillDown, setShowDrillDown] = useState(false);
 
   // Fetch actuals data
   const { data: actuals = [], isLoading } = useQuery({
@@ -170,21 +174,37 @@ export function VarianceDashboard({ projectId, className }: VarianceDashboardPro
             <p className="text-xs text-muted-foreground mb-1">Actual</p>
             <p className="text-lg font-bold">{formatCurrency(totals.actual)}</p>
           </div>
-          <div className={cn(
-            'p-3 rounded-lg border',
-            totals.variancePercent > 5 ? 'bg-destructive/10 border-destructive/20' :
-            totals.variancePercent < -5 ? 'bg-green-500/10 border-green-500/20' :
-            'bg-muted/50'
-          )}>
-            <p className="text-xs text-muted-foreground mb-1">Variance</p>
+          {/* Clickable Variance Card */}
+          <button
+            onClick={() => setShowDrillDown(true)}
+            className={cn(
+              'p-3 rounded-lg border text-left w-full transition-all hover:ring-2 hover:ring-primary/20',
+              totals.variancePercent > 5 ? 'bg-destructive/10 border-destructive/20' :
+              totals.variancePercent < -5 ? 'bg-green-500/10 border-green-500/20' :
+              'bg-muted/50'
+            )}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs text-muted-foreground">Variance</p>
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+            </div>
             <p className={cn('text-lg font-bold', getVarianceColor(totals.variancePercent))}>
               {totals.variance >= 0 ? '+' : ''}{formatCurrency(totals.variance)}
             </p>
             <p className={cn('text-xs', getVarianceColor(totals.variancePercent))}>
               {totals.variancePercent >= 0 ? '+' : ''}{totals.variancePercent.toFixed(1)}%
             </p>
-          </div>
+          </button>
         </div>
+
+        {/* Variance Drill-Down Sheet */}
+        <VarianceDrillDown
+          isOpen={showDrillDown}
+          onClose={() => setShowDrillDown(false)}
+          actuals={filteredActuals}
+          totalVariance={totals.variance}
+          totalVariancePercent={totals.variancePercent}
+        />
 
         {/* Status breakdown */}
         <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
