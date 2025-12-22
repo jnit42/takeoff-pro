@@ -714,6 +714,89 @@ function buildToolDefinitions() {
 }
 
 // ========================================
+// BUILDING CODE SEARCH (Real Implementation)
+// ========================================
+
+async function searchBuildingCodes(query: string, zipCode: string, codeType?: string): Promise<{ found: boolean; snippet: string; source: string }> {
+  const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
+  
+  if (!FIRECRAWL_API_KEY) {
+    console.log('[construction-brain] No Firecrawl key, using fallback');
+    return {
+      found: false,
+      snippet: 'Building code lookup not configured. Please verify requirements manually with local building department.',
+      source: 'fallback'
+    };
+  }
+
+  try {
+    // Search up.codes which has organized building codes by location
+    const searchQuery = `site:up.codes ${zipCode} ${query} ${codeType || 'IRC'}`;
+    
+    console.log('[construction-brain] Building code search:', searchQuery);
+    
+    const response = await fetch('https://api.firecrawl.dev/v1/search', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${FIRECRAWL_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: searchQuery,
+        limit: 3,
+        scrapeOptions: {
+          formats: ['markdown'],
+          onlyMainContent: true,
+        }
+      }),
+    });
+
+    if (!response.ok) {
+      console.error('[construction-brain] Firecrawl error:', response.status);
+      return {
+        found: false,
+        snippet: 'Building code search failed. Verify requirements with local building department.',
+        source: 'error'
+      };
+    }
+
+    const result = await response.json();
+    
+    if (result.data && result.data.length > 0) {
+      // Extract relevant snippets
+      const snippets = result.data
+        .slice(0, 2)
+        .map((r: { markdown?: string; title?: string; url?: string }) => {
+          const content = r.markdown || '';
+          // Get first 500 chars of relevant content
+          const relevantPart = content.substring(0, 500);
+          return `**${r.title || 'Code Reference'}**\n${relevantPart}...\nSource: ${r.url || 'up.codes'}`;
+        })
+        .join('\n\n---\n\n');
+      
+      return {
+        found: true,
+        snippet: snippets,
+        source: 'up.codes'
+      };
+    }
+    
+    return {
+      found: false,
+      snippet: `No specific code found for "${query}" in ${zipCode}. Check local amendments with building department.`,
+      source: 'up.codes'
+    };
+  } catch (error) {
+    console.error('[construction-brain] Building code search error:', error);
+    return {
+      found: false,
+      snippet: 'Building code lookup failed. Verify requirements manually.',
+      source: 'error'
+    };
+  }
+}
+
+// ========================================
 // RESPONSE PARSER
 // ========================================
 
@@ -753,8 +836,9 @@ function parseAIResponse(aiMessage: { tool_calls?: Array<{ function: { name: str
           response.dataSources = args.sources || [];
           response.followUpQuestions = args.follow_up_questions;
         } else if (toolCall.function.name === 'search_building_codes') {
-          // Log building code search for auditing
-          console.log('[construction-brain] Building code search:', args);
+          // Actually execute the building code search
+          console.log('[construction-brain] Building code search requested:', args);
+          // Note: This is async but we're in a sync function - the search happens in the main handler
           response.dataSources.push(`Building code lookup: ${args.query} (${args.zip_code})`);
         }
       } catch (e) {

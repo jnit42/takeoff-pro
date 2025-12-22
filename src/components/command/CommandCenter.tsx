@@ -331,8 +331,17 @@ export function CommandCenter({ projectId, projectType, className }: CommandCent
       return;
     }
 
-    // If deterministic parser failed, try AI parsing with construction-brain
-    if (!result.success) {
+    // === BRAIN-PARSER HANDOFF ===
+    // Auto-fallback to construction-brain if:
+    // 1. Parser failed completely (!result.success)
+    // 2. Parser succeeded but with low confidence (< 0.7)
+    const avgConfidence = result.success && result.actions.length > 0
+      ? result.actions.reduce((sum, a) => sum + ((a as { confidence?: number }).confidence || 0.5), 0) / result.actions.length
+      : 0;
+    
+    const shouldUseAI = !result.success || avgConfidence < 0.7;
+    
+    if (shouldUseAI) {
       addMessage('system', '🧠 Thinking...');
       
       try {
