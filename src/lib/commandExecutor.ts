@@ -396,7 +396,14 @@ async function executeTakeoffAddItem(
   }
 
   const quantity = (params.quantity as number) || 0;
-  const unitCost = (params.unit_cost || params.cost || params.price) as number || 0;
+  
+  // Sanitize unit_cost - convert "?" or non-numeric to null
+  const rawUnitCost = params.unit_cost ?? params.cost ?? params.price;
+  const unitCost = (typeof rawUnitCost === 'number' && !isNaN(rawUnitCost)) 
+    ? rawUnitCost 
+    : (typeof rawUnitCost === 'string' && !isNaN(parseFloat(rawUnitCost)) && rawUnitCost !== '?')
+      ? parseFloat(rawUnitCost)
+      : null;
 
   const { data: item, error } = await supabase
     .from('takeoff_items')
@@ -407,7 +414,7 @@ async function executeTakeoffAddItem(
       unit: (params.unit as string) || 'EA',
       quantity,
       unit_cost: unitCost,
-      extended_cost: quantity * unitCost,
+      extended_cost: unitCost !== null ? quantity * unitCost : null,
       draft: (params.draft as boolean) ?? true, // Default to draft for AI-generated
       notes: params.notes as string,
     })
@@ -419,7 +426,7 @@ async function executeTakeoffAddItem(
   return {
     success: true,
     actionType: 'takeoff.add_item',
-    message: `Added "${item.description}" (${item.quantity} ${item.unit}${unitCost ? ` @ $${unitCost}` : ''})`,
+    message: `Added "${item.description}" (${item.quantity} ${item.unit}${unitCost ? ` @ $${unitCost}` : ' - TBD'})`,
     data: { itemId: item.id },
     undoable: true,
     undoData: { itemId: item.id },
@@ -452,17 +459,28 @@ async function executeTakeoffAddMultiple(
     };
   }
 
-  const insertData = items.map((item) => ({
-    project_id: context.projectId,
-    category: item.category || 'General',
-    description: item.description,
-    unit: item.unit || 'EA',
-    quantity: item.quantity || 0,
-    unit_cost: item.unit_cost || 0,
-    extended_cost: (item.quantity || 0) * (item.unit_cost || 0),
-    draft: true, // Always create as drafts so user can review
-    notes: item.notes || null,
-  }));
+  const insertData = items.map((item) => {
+    const qty = item.quantity || 0;
+    // Sanitize unit_cost - convert "?" or non-numeric to null
+    const rawCost = item.unit_cost;
+    const cost = (typeof rawCost === 'number' && !isNaN(rawCost)) 
+      ? rawCost 
+      : (typeof rawCost === 'string' && !isNaN(parseFloat(rawCost as unknown as string)) && rawCost !== '?')
+        ? parseFloat(rawCost as unknown as string)
+        : null;
+    
+    return {
+      project_id: context.projectId,
+      category: item.category || 'General',
+      description: item.description,
+      unit: item.unit || 'EA',
+      quantity: qty,
+      unit_cost: cost,
+      extended_cost: cost !== null ? qty * cost : null,
+      draft: true, // Always create as drafts so user can review
+      notes: item.notes || null,
+    };
+  });
 
   const { data: created, error } = await supabase
     .from('takeoff_items')
