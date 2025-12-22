@@ -223,10 +223,79 @@ function getCacheStatus(lastPriceAt: string | null): PriceStatus {
 // SCRAPING WITH FIRECRAWL (Only on forceRefresh)
 // ========================================
 
+// ========================================
+// FAILURE LOGGING
+// ========================================
+
+async function logScrapeFailure(
+  userId: string | null,
+  store: string,
+  searchTerm: string,
+  zipCode: string,
+  errorType: string,
+  errorMessage: string,
+  httpStatus: number | null,
+  responsePreview: string | null,
+  searchUrl: string,
+  durationMs: number
+): Promise<void> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    
+    await supabase.from('scrape_failures').insert({
+      user_id: userId,
+      store,
+      search_term: searchTerm,
+      zip_code: zipCode,
+      error_type: errorType,
+      error_message: errorMessage,
+      http_status: httpStatus,
+      response_preview: responsePreview?.slice(0, 500),
+      search_url: searchUrl,
+      duration_ms: durationMs,
+    } as never);
+    
+    console.log(`[price-lookup] Logged failure: ${errorType} for ${store}`);
+  } catch (err) {
+    console.error('[price-lookup] Failed to log failure:', err);
+  }
+}
+
+// ========================================
+// BUILD PRODUCT URL
+// ========================================
+
+function buildProductUrl(store: string, sku: string | null, productName: string): string | null {
+  if (!sku && !productName) return null;
+  
+  const cleanName = productName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').slice(0, 60);
+  
+  if (store.toLowerCase() === 'home depot') {
+    // Home Depot URL format: /p/PRODUCT-NAME/SKU
+    if (sku) {
+      return `https://www.homedepot.com/p/${cleanName}/${sku}`;
+    }
+    // Fallback to search
+    return `https://www.homedepot.com/s/${encodeURIComponent(productName)}`;
+  } else if (store.toLowerCase() === "lowe's" || store.toLowerCase() === 'lowes') {
+    // Lowe's URL format: /pd/PRODUCT-NAME/SKU
+    if (sku) {
+      return `https://www.lowes.com/pd/${cleanName}/${sku}`;
+    }
+    // Fallback to search
+    return `https://www.lowes.com/search?searchTerm=${encodeURIComponent(productName)}`;
+  }
+  
+  return null;
+}
+
 async function scrapeStorePrices(
   item: string,
   zipCode: string,
-  stores: string[]
+  stores: string[],
+  userId: string | null
 ): Promise<Array<{
   store: string;
   productName: string;
@@ -259,18 +328,20 @@ async function scrapeStorePrices(
   const specs = extractProductSpecs(item);
 
   for (const store of stores.slice(0, 2)) {
+    const startTime = Date.now();
+    let searchUrl = '';
+    
     try {
-      let searchUrl = '';
-      
       if (store.toLowerCase() === 'home depot') {
-        searchUrl = `https://www.homedepot.com/s/${encodeURIComponent(normalizedItem)}?NCNI-5&zipCode=${zipCode}`;
+        // Updated HD URL format - use their search API format
+        searchUrl = `https://www.homedepot.com/s/${encodeURIComponent(normalizedItem)}?NCNI-5&storeId=121&zipCode=${zipCode}`;
       } else if (store.toLowerCase() === "lowe's" || store.toLowerCase() === 'lowes') {
         searchUrl = `https://www.lowes.com/search?searchTerm=${encodeURIComponent(normalizedItem)}&zipCode=${zipCode}`;
       } else {
         continue;
       }
 
-      console.log(`[price-lookup] Scraping ${store} for: ${normalizedItem}`);
+      console.log(`[price-lookup] Scraping ${store} for: ${normalizedItem} (URL: ${searchUrl})`);
 
       const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
         method: 'POST',
@@ -290,13 +361,13 @@ async function scrapeStorePrices(
                   items: {
                     type: 'object',
                     properties: {
-                      name: { type: 'string' },
-                      price: { type: 'number' },
-                      unit: { type: 'string' },
-                      sku: { type: 'string' },
-                      url: { type: 'string' },
-                      inStock: { type: 'boolean' },
-                      brand: { type: 'string' },
+                      name: { type: 'string', description: 'Full product name' },
+                      price: { type: 'number', description: 'Price in dollars as a number (e.g., 5.98 not "$5.98")' },
+                      unit: { type: 'string', description: 'Unit of measure like "each", "per piece", "per sq ft"' },
+                      sku: { type: 'string', description: 'Product SKU or item number' },
+                      productUrl: { type: 'string', description: 'Full URL to the product page' },
+                      inStock: { type: 'boolean', description: 'Whether the item is in stock' },
+                      brand: { type: 'string', description: 'Brand name' },
                     },
                     required: ['name', 'price']
                   },
@@ -305,40 +376,119 @@ async function scrapeStorePrices(
               },
               required: ['products']
             },
-            prompt: `Extract the first 5 product results from this ${store} search page. Include exact prices, product names, SKUs if visible, and stock status. Focus on construction materials matching: ${item}`
+            prompt: `Extract the first 5 product search results from this ${store} page. For each product:
+- name: the full product name including dimensions
+- price: just the number (e.g., 5.98)
+- sku: the item number or SKU (look for "Item #" or "Model #")
+- productUrl: the FULL URL to view that specific product (starts with https://)
+- inStock: true if available, false if out of stock
+
+Search term: ${item}`
           },
-          waitFor: 2000,
-          timeout: 15000,
+          waitFor: 3000,
+          timeout: 20000,
         }),
       });
 
+      const durationMs = Date.now() - startTime;
+
       if (!response.ok) {
-        console.error(`[price-lookup] Firecrawl error for ${store}:`, response.status);
+        const errorText = await response.text().catch(() => '');
+        console.error(`[price-lookup] Firecrawl error for ${store}:`, response.status, errorText);
+        
+        await logScrapeFailure(
+          userId,
+          store,
+          normalizedItem,
+          zipCode,
+          'http_error',
+          `HTTP ${response.status}: ${errorText}`,
+          response.status,
+          errorText,
+          searchUrl,
+          durationMs
+        );
         continue;
       }
 
       const data = await response.json();
       
-      if (data.success && data.data?.extract?.products) {
+      if (!data.success) {
+        console.error(`[price-lookup] Firecrawl returned failure for ${store}:`, data.error);
+        
+        await logScrapeFailure(
+          userId,
+          store,
+          normalizedItem,
+          zipCode,
+          'api_failure',
+          data.error || 'Unknown API error',
+          null,
+          JSON.stringify(data).slice(0, 500),
+          searchUrl,
+          durationMs
+        );
+        continue;
+      }
+      
+      if (data.data?.extract?.products && data.data.extract.products.length > 0) {
+        console.log(`[price-lookup] ${store} returned ${data.data.extract.products.length} products`);
+        
         for (const product of data.data.extract.products.slice(0, 3)) {
           const confidence = calculateMatchConfidence(item, product.name, specs);
           
           if (confidence >= 0.4) {
+            // Build proper product URL - prefer extracted URL, fallback to constructed
+            let productUrl = product.productUrl || product.url || null;
+            if (!productUrl || !productUrl.startsWith('http')) {
+              productUrl = buildProductUrl(store, product.sku, product.name);
+            }
+            
             results.push({
               store,
               productName: product.name,
               price: product.price || null,
               unit: product.unit || 'EA',
               sku: product.sku || null,
-              productUrl: product.url || null,
+              productUrl,
               inStock: product.inStock !== false,
               rawData: { ...product, searchUrl, confidence, specs },
             });
           }
         }
+      } else {
+        console.log(`[price-lookup] ${store} returned no products`);
+        
+        await logScrapeFailure(
+          userId,
+          store,
+          normalizedItem,
+          zipCode,
+          'no_results',
+          'Scrape succeeded but no products extracted',
+          null,
+          JSON.stringify(data.data?.extract || {}).slice(0, 500),
+          searchUrl,
+          durationMs
+        );
       }
     } catch (error) {
+      const durationMs = Date.now() - startTime;
+      const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`[price-lookup] Error scraping ${store}:`, error);
+      
+      await logScrapeFailure(
+        userId,
+        store,
+        normalizedItem,
+        zipCode,
+        'exception',
+        errorMessage,
+        null,
+        null,
+        searchUrl,
+        durationMs
+      );
     }
   }
 
@@ -606,7 +756,7 @@ serve(async (req) => {
         if (rateLimit.allowed) {
           console.log('[price-lookup] Scraping for:', item);
           
-          const scraped = await scrapeStorePrices(item, zipCode, stores);
+          const scraped = await scrapeStorePrices(item, zipCode, stores, userId);
           scrapesPerformed++;
           
           for (const s of scraped) {

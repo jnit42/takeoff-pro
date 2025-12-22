@@ -1619,6 +1619,54 @@ export type Database = {
           },
         ]
       }
+      scrape_failures: {
+        Row: {
+          created_at: string
+          duration_ms: number | null
+          error_message: string | null
+          error_type: string
+          http_status: number | null
+          id: string
+          resolved: boolean | null
+          response_preview: string | null
+          search_term: string
+          search_url: string | null
+          store: string
+          user_id: string | null
+          zip_code: string | null
+        }
+        Insert: {
+          created_at?: string
+          duration_ms?: number | null
+          error_message?: string | null
+          error_type: string
+          http_status?: number | null
+          id?: string
+          resolved?: boolean | null
+          response_preview?: string | null
+          search_term: string
+          search_url?: string | null
+          store: string
+          user_id?: string | null
+          zip_code?: string | null
+        }
+        Update: {
+          created_at?: string
+          duration_ms?: number | null
+          error_message?: string | null
+          error_type?: string
+          http_status?: number | null
+          id?: string
+          resolved?: boolean | null
+          response_preview?: string | null
+          search_term?: string
+          search_url?: string | null
+          store?: string
+          user_id?: string | null
+          zip_code?: string | null
+        }
+        Relationships: []
+      }
       store_sku_mappings: {
         Row: {
           created_at: string
