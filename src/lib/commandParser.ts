@@ -6,6 +6,7 @@
 export type ActionType =
   | 'project.create'
   | 'project.set_defaults'
+  | 'project.log_payment'
   | 'takeoff.add_item'
   | 'takeoff.add_multiple'
   | 'takeoff.update_item'
@@ -317,6 +318,27 @@ export function parseCommand(command: string, projectContext?: { projectId?: str
     });
   }
 
+  // === QUICK LOG PAYMENT COMMANDS ===
+  // Pattern: "paid [who] $[amount] for [description]"
+  const paymentMatch = lower.match(/paid\s+(.+?)\s+\$?(\d+(?:\.\d+)?)\s+for\s+(.+)/i);
+  if (paymentMatch) {
+    const paidTo = capitalizeWords(paymentMatch[1].trim());
+    const amount = parseFloat(paymentMatch[2]);
+    const description = capitalizeWords(paymentMatch[3].trim());
+
+    actions.push({
+      type: 'project.log_payment',
+      params: {
+        paid_to: paidTo,
+        amount,
+        description,
+        category: inferCategory(description),
+        trade: inferTrade(description),
+      },
+      confidence: 0.9,
+    });
+  }
+
   // === PLANS COMMANDS ===
 
   if (lower.match(/open\s+(?:plan|blueprint|drawing)/)) {
@@ -332,7 +354,7 @@ export function parseCommand(command: string, projectContext?: { projectId?: str
     return {
       success: false,
       actions: [],
-      error: `I couldn't understand that command. Try things like:\n• "Create project [name]. Tax 7 markup 20 burden 35"\n• "Add drywall 1050 sf at $12.99"\n• "Generate drafts using framing + drywall"\n• "Promote all drafts"\n• "Export PDF"`,
+      error: `I couldn't understand that command. Try things like:\n• "Create project [name]. Tax 7 markup 20 burden 35"\n• "Add drywall 1050 sf at $12.99"\n• "Paid Jose $500 for demo"\n• "Generate drafts using framing + drywall"\n• "Export PDF"`,
     };
   }
 
