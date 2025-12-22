@@ -403,16 +403,38 @@ Search term: ${item}`
     return null;
   };
 
+  // Helper to validate product URLs (STRICT - no category pages)
+  const isValidProductUrl = (url: string): boolean => {
+    if (!url || typeof url !== 'string') return false;
+    const lower = url.toLowerCase();
+    
+    // Home Depot: MUST have /p/ (product), MUST NOT have /b/ (browse) or /s/ (search)
+    if (lower.includes('homedepot.com')) {
+      return lower.includes('/p/') && !lower.includes('/b/') && !lower.includes('/s/') && !lower.includes('/N-');
+    }
+    
+    // Lowe's: MUST have /pd/ (product detail)
+    if (lower.includes('lowes.com')) {
+      return lower.includes('/pd/') && !lower.includes('/search') && !lower.includes('/pl/');
+    }
+    
+    return false;
+  };
+
   // Build scrape promises for PARALLEL execution
   const scrapePromises = stores.slice(0, 2).map(async (store) => {
     const startTime = Date.now();
     let searchUrl = '';
     
     try {
+      // Use store's native search (more reliable for getting prices)
+      // Then apply strict isValidProductUrl filter on results
+      const encodedItem = encodeURIComponent(normalizedItem);
+      
       if (store.toLowerCase() === 'home depot') {
-        searchUrl = `https://www.homedepot.com/s/${encodeURIComponent(normalizedItem)}?NCNI-5&storeId=121&zipCode=${zipCode}`;
+        searchUrl = `https://www.homedepot.com/s/${encodedItem}?NCNI-5&storeId=121&zipCode=${zipCode}`;
       } else if (store.toLowerCase() === "lowe's" || store.toLowerCase() === 'lowes') {
-        searchUrl = `https://www.lowes.com/search?searchTerm=${encodeURIComponent(normalizedItem)}&zipCode=${zipCode}`;
+        searchUrl = `https://www.lowes.com/search?searchTerm=${encodedItem}&zipCode=${zipCode}`;
       } else {
         return [];
       }
@@ -491,54 +513,53 @@ Search term: ${item}`
           
           // Lower threshold - if we have a price, show it (user can decide)
           if (confidence >= 0.2 && product.price) {
-            // Validate and clean productUrl from Firecrawl
-            // Firecrawl may return fake/hallucinated URLs, so use search URLs as primary fallback
+            // STRICT URL validation - use the isValidProductUrl helper
+            // Do NOT fall back to search URLs (they are category pages, not products)
             let productUrl: string | null = null;
             
             if (product.productUrl && typeof product.productUrl === 'string') {
               const url = product.productUrl.trim();
               
-              // Validate Home Depot URLs - accept /p/ product pages
-              const isValidHD = url.startsWith('https://www.homedepot.com/p/') && 
-                               url.length > 50 &&
-                               !url.includes('/b/') &&
-                               !url.includes('/s/') &&
-                               !url.includes('undefined') &&
-                               !url.includes('null');
-              
-              // Validate Lowe's URLs - accept /pd/ product detail pages
-              const isValidLowes = url.startsWith('https://www.lowes.com/pd/') && 
-                                  url.length > 40 &&
-                                  !url.includes('/search/') &&
-                                  !url.includes('undefined') &&
-                                  !url.includes('null');
-              
-              if (isValidHD || isValidLowes) {
+              // Use our strict validation function
+              if (isValidProductUrl(url)) {
                 productUrl = url;
                 console.log(`[price-lookup] Accepted valid product URL: ${url.slice(0, 80)}...`);
               } else {
-                console.log(`[price-lookup] URL not a valid PDP, using search fallback: ${url.slice(0, 60)}...`);
+                console.log(`[price-lookup] Rejected invalid URL (category/search page): ${url.slice(0, 60)}...`);
               }
             }
             
-            // Always use search URL as fallback - much more reliable than Firecrawl URLs
-            if (!productUrl) {
-              productUrl = buildProductUrl(store, null, product.name);
+            // STRICT MODE: Do NOT use search URL fallback - it's a category page
+            // Only return results with verified product URLs
+            if (productUrl) {
+              console.log(`[price-lookup] Adding result with verified URL: ${product.name} @ $${product.price} from ${store}`);
+              
+              storeResults.push({
+                store,
+                productName: product.name,
+                price: product.price || null,
+                unit: product.unit || 'EA',
+                sku: isValidSku(product.sku) ? product.sku : null,
+                productUrl,
+                inStock: product.inStock !== false,
+                rawData: { ...product, searchUrl, confidence, specs, urlVerified: true },
+              });
+            } else {
+              // Still add the result but with null productUrl and a flag
+              // This way user gets the price info but knows URL is unverified
+              console.log(`[price-lookup] Adding result WITHOUT verified URL: ${product.name} @ $${product.price} from ${store}`);
+              
+              storeResults.push({
+                store,
+                productName: product.name,
+                price: product.price || null,
+                unit: product.unit || 'EA',
+                sku: isValidSku(product.sku) ? product.sku : null,
+                productUrl: null, // Explicitly null - no fallback to category pages
+                inStock: product.inStock !== false,
+                rawData: { ...product, searchUrl, confidence, specs, urlVerified: false },
+              });
             }
-            
-            // ALWAYS add the result if we have a price - don't filter too aggressively
-            console.log(`[price-lookup] Adding result: ${product.name} @ $${product.price} from ${store}`);
-            
-            storeResults.push({
-              store,
-              productName: product.name,
-              price: product.price || null,
-              unit: product.unit || 'EA',
-              sku: isValidSku(product.sku) ? product.sku : null,
-              productUrl,
-              inStock: product.inStock !== false,
-              rawData: { ...product, searchUrl, confidence, specs },
-            });
           }
         }
       } else {
