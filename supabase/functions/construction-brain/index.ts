@@ -1,6 +1,7 @@
 /**
  * Construction Brain - Central AI with reasoning, context, and learning
- * The intelligent core that understands construction and learns from data
+ * SECURITY: Requires JWT auth, verifies project ownership
+ * PROPOSE-ONLY: Returns proposed actions, never writes directly
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -86,10 +87,67 @@ interface BrainResponse {
   warnings?: string[];
 }
 
+// ========================================
+// AUTHENTICATION HELPERS
+// ========================================
+
+async function authenticateRequest(req: Request): Promise<{ authenticated: boolean; userId: string | null; error?: string }> {
+  const authHeader = req.headers.get('Authorization');
+  
+  if (!authHeader) {
+    return { authenticated: false, userId: null, error: 'Missing Authorization header' };
+  }
+
+  const token = authHeader.replace('Bearer ', '');
+  
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+  
+  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } }
+  });
+
+  const { data: { user }, error } = await supabase.auth.getUser();
+
+  if (error || !user) {
+    return { authenticated: false, userId: null, error: error?.message || 'Invalid token' };
+  }
+
+  return { authenticated: true, userId: user.id };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function verifyProjectOwnership(supabase: any, userId: string, projectId: string): Promise<boolean> {
+  if (!projectId) return true;
+
+  const { data: project } = await supabase
+    .from('projects')
+    .select('user_id')
+    .eq('id', projectId)
+    .single();
+
+  return project?.user_id === userId;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+
+  // ========================================
+  // SECURITY: Authenticate and derive user from JWT
+  // ========================================
+  const auth = await authenticateRequest(req);
+  
+  if (!auth.authenticated || !auth.userId) {
+    console.error('[construction-brain] Auth failed:', auth.error);
+    return new Response(
+      JSON.stringify({ error: auth.error || 'Unauthorized' }),
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const userId = auth.userId; // DERIVED FROM JWT, not request body
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -107,10 +165,23 @@ serve(async (req) => {
     const { 
       message, 
       projectId, 
-      userId,
       conversationId,
       conversationHistory = []
     } = await req.json();
+
+    // ========================================
+    // SECURITY: Verify project ownership
+    // ========================================
+    if (projectId) {
+      const ownsProject = await verifyProjectOwnership(supabase, userId, projectId);
+      if (!ownsProject) {
+        console.error('[construction-brain] Access denied: user does not own project');
+        return new Response(
+          JSON.stringify({ error: 'Access denied: you do not own this project' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
 
     console.log('[construction-brain] Processing:', { message, projectId, userId });
 
@@ -176,6 +247,7 @@ serve(async (req) => {
 
     // ========================================
     // PHASE 4: PARSE AND VALIDATE RESPONSE
+    // NOTE: AI returns PROPOSALS only - executor handles writes
     // ========================================
     
     const brainResponse = parseAIResponse(aiMessage, knowledgeContext);
@@ -184,21 +256,19 @@ serve(async (req) => {
     // PHASE 5: LOG DECISION FOR AUDITING
     // ========================================
     
-    if (userId) {
-      await logDecision(supabase, {
-        userId,
-        projectId,
-        conversationId,
-        inputText: message,
-        inputContext: { projectContext, knowledgeContext },
-        decisionType: brainResponse.actions?.length ? 'action_proposal' : 'explanation',
-        outputActions: brainResponse.actions,
-        outputReasoning: brainResponse.reasoning,
-        confidenceScore: brainResponse.confidence,
-        confidenceFactors: brainResponse.confidenceFactors,
-        dataSourcesUsed: brainResponse.dataSources,
-      });
-    }
+    await logDecision(supabase, {
+      userId,
+      projectId,
+      conversationId,
+      inputText: message,
+      inputContext: { projectContext, knowledgeContext },
+      decisionType: brainResponse.actions?.length ? 'action_proposal' : 'explanation',
+      outputActions: brainResponse.actions,
+      outputReasoning: brainResponse.reasoning,
+      confidenceScore: brainResponse.confidence,
+      confidenceFactors: brainResponse.confidenceFactors,
+      dataSourcesUsed: brainResponse.dataSources,
+    });
 
     return new Response(
       JSON.stringify(brainResponse),
@@ -218,7 +288,8 @@ serve(async (req) => {
 // CONTEXT BUILDERS
 // ========================================
 
-async function buildProjectContext(supabase: any, projectId: string | null, userId: string | null): Promise<ProjectContext> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function buildProjectContext(supabase: any, projectId: string | null, userId: string): Promise<ProjectContext> {
   const context: ProjectContext = {};
 
   if (!projectId) return context;
@@ -265,16 +336,14 @@ async function buildProjectContext(supabase: any, projectId: string | null, user
   }
 
   // Get user's subcontractors
-  if (userId) {
-    const { data: subs } = await supabase
-      .from('subcontractors')
-      .select('name, trade, avg_vs_market, reliability_score')
-      .eq('user_id', userId)
-      .limit(20);
-    
-    if (subs) {
-      context.subcontractors = subs;
-    }
+  const { data: subs } = await supabase
+    .from('subcontractors')
+    .select('name, trade, avg_vs_market, reliability_score')
+    .eq('user_id', userId)
+    .limit(20);
+  
+  if (subs) {
+    context.subcontractors = subs;
   }
 
   // Get recent actuals for learning
@@ -292,6 +361,7 @@ async function buildProjectContext(supabase: any, projectId: string | null, user
   return context;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function buildKnowledgeContext(supabase: any, message: string, projectContext: ProjectContext): Promise<KnowledgeContext> {
   const context: KnowledgeContext = {
     relevantKnowledge: [],
@@ -322,6 +392,7 @@ async function buildKnowledgeContext(supabase: any, message: string, projectCont
     
     if (knowledge) {
       // Prioritize regional matches
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       context.relevantKnowledge = knowledge.sort((a: any, b: any) => {
         if (a.region === region && b.region !== region) return -1;
         if (b.region === region && a.region !== region) return 1;
@@ -398,6 +469,9 @@ CURRENT PROJECT: "${projectContext.project.name}"
 
   return `You are the Construction Brain - an expert estimating AI with 50+ years of field experience. You think like a veteran GC who's seen it all.
 
+CRITICAL: You are PROPOSE-ONLY. You suggest actions but NEVER write directly to the database.
+All your proposed actions will be shown to the user for confirmation before execution.
+
 ${projectInfo}
 ${existingItems}
 ${subInfo}
@@ -430,8 +504,14 @@ When using takeoff.add_item, always include:
 - description: Full item description (e.g., "2x4x8 Stud" not "stud")
 - quantity: Number
 - unit: EA, SF, LF, SHT, CY, etc.
-- unit_cost: Dollar amount (optional but preferred)
+- unit_cost: Dollar amount (from price book, NOT web scraping)
 - category: Framing, Drywall, Electrical, Plumbing, etc.
+
+PRICING SOURCE PRIORITY:
+1. User's price book entries
+2. Knowledge base (verified historical data)
+3. Leave blank and note "price TBD" if unknown
+NEVER use web-scraped prices - they are unreliable.
 
 Confidence should be 0-1 scale (0.85 = 85% confident).
 
@@ -454,7 +534,7 @@ function buildToolDefinitions() {
       type: 'function',
       function: {
         name: 'propose_actions',
-        description: 'Propose one or more actions to be executed (add items, update prices, delete items, etc.)',
+        description: 'Propose one or more actions to be executed (add items, update prices, delete items, etc.). These are PROPOSALS that the user must confirm before execution.',
         parameters: {
           type: 'object',
           properties: {
@@ -472,15 +552,14 @@ function buildToolDefinitions() {
                       'takeoff.delete_item',
                       'takeoff.delete_items',
                       'labor.add_task', 
-                      'project.update', 
-                      'pricing.lookup',
+                      'project.update',
                       'export.pdf',
                       'export.csv'
                     ]
                   },
                   params: { 
                     type: 'object',
-                    description: 'For takeoff.add_item use: description, quantity, unit, unit_cost, category. For takeoff.delete_item use: description or item_id. For pricing.lookup use: item (string). For export use: which (takeoff/labor/rfis).'
+                    description: 'For takeoff.add_item use: description, quantity, unit, unit_cost, category. For takeoff.delete_item use: description or item_id. For export use: which (takeoff/labor/rfis).'
                   },
                   confidence: { type: 'number', minimum: 0, maximum: 1 }
                 },
@@ -528,17 +607,17 @@ function buildToolDefinitions() {
 // RESPONSE PARSER
 // ========================================
 
-function parseAIResponse(aiMessage: any, knowledgeContext: KnowledgeContext): BrainResponse {
+function parseAIResponse(aiMessage: { tool_calls?: Array<{ function: { name: string; arguments: string } }>; content?: string }, knowledgeContext: KnowledgeContext): BrainResponse {
   const response: BrainResponse = {
     success: true,
     reasoning: '',
-    confidence: 50,
+    confidence: 0.5,
     confidenceFactors: [],
     dataSources: [],
   };
 
   // Check for tool calls
-  if (aiMessage.tool_calls?.length > 0) {
+  if (aiMessage.tool_calls?.length) {
     for (const toolCall of aiMessage.tool_calls) {
       try {
         const args = JSON.parse(toolCall.function.arguments);
@@ -573,7 +652,7 @@ function parseAIResponse(aiMessage: any, knowledgeContext: KnowledgeContext): Br
   // Fall back to content if no tool calls
   if (!response.reasoning && aiMessage.content) {
     response.reasoning = aiMessage.content;
-    response.confidence = 60; // Default moderate confidence for freeform responses
+    response.confidence = 0.6;
   }
 
   return response;
@@ -583,14 +662,15 @@ function parseAIResponse(aiMessage: any, knowledgeContext: KnowledgeContext): Br
 // DECISION LOGGING
 // ========================================
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function logDecision(supabase: any, decision: {
   userId: string;
   projectId?: string;
   conversationId?: string;
   inputText: string;
-  inputContext: any;
+  inputContext: unknown;
   decisionType: string;
-  outputActions?: any[];
+  outputActions?: unknown[];
   outputReasoning: string;
   confidenceScore: number;
   confidenceFactors: string[];

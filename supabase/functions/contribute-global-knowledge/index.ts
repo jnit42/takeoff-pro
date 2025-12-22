@@ -1,6 +1,7 @@
 /**
  * Contribute Global Knowledge Edge Function
  * Aggregates anonymized project data into collective learning
+ * SECURITY: Requires JWT auth, verifies project ownership
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -21,10 +22,67 @@ interface KnowledgeContribution {
   value: number;
 }
 
+// ========================================
+// AUTHENTICATION
+// ========================================
+
+async function authenticateRequest(req: Request): Promise<{ authenticated: boolean; userId: string | null; error?: string }> {
+  const authHeader = req.headers.get('Authorization');
+  
+  if (!authHeader) {
+    return { authenticated: false, userId: null, error: 'Missing Authorization header' };
+  }
+
+  const token = authHeader.replace('Bearer ', '');
+  
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+  
+  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } }
+  });
+
+  const { data: { user }, error } = await supabase.auth.getUser();
+
+  if (error || !user) {
+    return { authenticated: false, userId: null, error: error?.message || 'Invalid token' };
+  }
+
+  return { authenticated: true, userId: user.id };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function verifyProjectOwnership(supabase: any, userId: string, projectId: string): Promise<boolean> {
+  if (!projectId) return false;
+
+  const { data: project } = await supabase
+    .from('projects')
+    .select('user_id')
+    .eq('id', projectId)
+    .single();
+
+  return project?.user_id === userId;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+
+  // ========================================
+  // SECURITY: Authenticate
+  // ========================================
+  const auth = await authenticateRequest(req);
+  
+  if (!auth.authenticated || !auth.userId) {
+    console.error('[contribute-global] Auth failed:', auth.error);
+    return new Response(
+      JSON.stringify({ error: auth.error || 'Unauthorized' }),
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const userId = auth.userId;
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -36,6 +94,20 @@ serve(async (req) => {
       projectId: string;
     };
 
+    // ========================================
+    // SECURITY: Verify project ownership
+    // ========================================
+    if (projectId) {
+      const ownsProject = await verifyProjectOwnership(supabase, userId, projectId);
+      if (!ownsProject) {
+        console.error('[contribute-global] Access denied: user does not own project');
+        return new Response(
+          JSON.stringify({ error: 'Access denied: you do not own this project' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     if (!contributions || !Array.isArray(contributions) || contributions.length === 0) {
       return new Response(
         JSON.stringify({ error: 'No contributions provided' }),
@@ -43,14 +115,13 @@ serve(async (req) => {
       );
     }
 
-    console.log('[contribute-global] Processing', contributions.length, 'contributions from project:', projectId);
+    console.log('[contribute-global] Processing', contributions.length, 'contributions from user:', userId);
 
     const results = [];
 
     for (const contrib of contributions) {
       const { knowledge_type, trade, category, region, project_type, key, value } = contrib;
 
-      // Check if this knowledge entry already exists
       const { data: existing, error: fetchError } = await supabase
         .from('global_knowledge')
         .select('*')
@@ -68,20 +139,17 @@ serve(async (req) => {
       }
 
       if (existing) {
-        // Update existing entry with running statistics
         const newCount = existing.sample_count + 1;
         const existingValues = existing.value as { samples?: number[] } || { samples: [] };
-        const samples = [...(existingValues.samples || []), value].slice(-1000); // Keep last 1000 samples
+        const samples = [...(existingValues.samples || []), value].slice(-1000);
         
         const newMin = Math.min(existing.min_value || Infinity, value);
         const newMax = Math.max(existing.max_value || -Infinity, value);
         const newAvg = samples.reduce((a: number, b: number) => a + b, 0) / samples.length;
         
-        // Calculate standard deviation
         const squaredDiffs = samples.map((v: number) => Math.pow(v - newAvg, 2));
         const newStdDev = Math.sqrt(squaredDiffs.reduce((a: number, b: number) => a + b, 0) / samples.length);
 
-        // Confidence increases with sample size (asymptotic to 1.0)
         const newConfidence = Math.min(0.95, 0.3 + (0.65 * (1 - Math.exp(-newCount / 50))));
 
         const { error: updateError } = await supabase
@@ -100,13 +168,11 @@ serve(async (req) => {
           .eq('id', existing.id);
 
         if (updateError) {
-          console.error('[contribute-global] Update error:', updateError);
           results.push({ key, success: false, error: updateError.message });
         } else {
           results.push({ key, success: true, action: 'updated', sample_count: newCount });
         }
       } else {
-        // Create new entry
         const { error: insertError } = await supabase
           .from('global_knowledge')
           .insert({
@@ -122,12 +188,11 @@ serve(async (req) => {
             max_value: value,
             avg_value: value,
             std_dev: 0,
-            confidence: 0.3, // Low initial confidence
+            confidence: 0.3,
             last_updated_by_project: projectId,
           });
 
         if (insertError) {
-          console.error('[contribute-global] Insert error:', insertError);
           results.push({ key, success: false, error: insertError.message });
         } else {
           results.push({ key, success: true, action: 'created' });
@@ -136,7 +201,7 @@ serve(async (req) => {
     }
 
     const successCount = results.filter(r => r.success).length;
-    console.log('[contribute-global] Completed:', successCount, '/', contributions.length, 'successful');
+    console.log('[contribute-global] Completed:', successCount, '/', contributions.length);
 
     return new Response(
       JSON.stringify({ 

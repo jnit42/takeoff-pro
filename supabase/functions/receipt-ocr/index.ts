@@ -1,6 +1,7 @@
 /**
  * Receipt OCR Edge Function
  * Uses Lovable AI (Gemini Vision) to extract structured data from receipt/invoice images
+ * SECURITY: Requires JWT auth, verifies project ownership before writing
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -31,11 +32,66 @@ interface ExtractionResult {
   raw_text: string;
 }
 
+// ========================================
+// AUTHENTICATION
+// ========================================
+
+async function authenticateRequest(req: Request): Promise<{ authenticated: boolean; userId: string | null; error?: string }> {
+  const authHeader = req.headers.get('Authorization');
+  
+  if (!authHeader) {
+    return { authenticated: false, userId: null, error: 'Missing Authorization header' };
+  }
+
+  const token = authHeader.replace('Bearer ', '');
+  
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+  
+  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } }
+  });
+
+  const { data: { user }, error } = await supabase.auth.getUser();
+
+  if (error || !user) {
+    return { authenticated: false, userId: null, error: error?.message || 'Invalid token' };
+  }
+
+  return { authenticated: true, userId: user.id };
+}
+
+async function verifyProjectOwnership(supabase: ReturnType<typeof createClient>, userId: string, projectId: string): Promise<boolean> {
+  if (!projectId) return false;
+
+  const { data: project } = await supabase
+    .from('projects')
+    .select('user_id')
+    .eq('id', projectId)
+    .single();
+
+  return project?.user_id === userId;
+}
+
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+
+  // ========================================
+  // SECURITY: Authenticate
+  // ========================================
+  const auth = await authenticateRequest(req);
+  
+  if (!auth.authenticated || !auth.userId) {
+    console.error('[receipt-ocr] Auth failed:', auth.error);
+    return new Response(
+      JSON.stringify({ error: auth.error || 'Unauthorized' }),
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const userId = auth.userId;
 
   try {
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
@@ -56,13 +112,30 @@ serve(async (req) => {
       );
     }
 
-    console.log('[receipt-ocr] Processing receipt for project:', projectId);
+    // ========================================
+    // SECURITY: Verify project ownership before any DB writes
+    // ========================================
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    if (projectId) {
+      const ownsProject = await verifyProjectOwnership(supabase, userId, projectId);
+      if (!ownsProject) {
+        console.error('[receipt-ocr] Access denied: user does not own project');
+        return new Response(
+          JSON.stringify({ error: 'Access denied: you do not own this project' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    console.log('[receipt-ocr] Processing receipt for user:', userId);
 
     // Build the image content for the API
     let imageContent: { type: string; image_url?: { url: string }; };
     
     if (imageBase64) {
-      // Base64 encoded image
       imageContent = {
         type: "image_url",
         image_url: {
@@ -70,7 +143,6 @@ serve(async (req) => {
         }
       };
     } else {
-      // URL to image
       imageContent = {
         type: "image_url",
         image_url: { url: imageUrl }
@@ -90,12 +162,8 @@ EXTRACTION RULES:
    - Unit price
    - Line total
 5. Find subtotal, tax, and total amounts
-6. For construction materials, try to identify:
-   - Lumber dimensions (2x4, 2x6, etc.)
-   - Material types (plywood, drywall, etc.)
-   - Standard units (LF for linear, SF for sheets, EA for items)
 
-RESPOND WITH VALID JSON ONLY - no markdown, no explanation:
+RESPOND WITH VALID JSON ONLY:
 {
   "vendor_name": "Store Name",
   "receipt_date": "2024-01-15",
@@ -114,11 +182,9 @@ RESPOND WITH VALID JSON ONLY - no markdown, no explanation:
   ],
   "confidence": 0.95,
   "raw_text": "Full text extracted from receipt..."
-}
+}`;
 
-If a field cannot be determined, use null. Confidence should reflect your certainty (0.0-1.0).`;
-
-    console.log('[receipt-ocr] Calling Lovable AI with vision model...');
+    console.log('[receipt-ocr] Calling Lovable AI...');
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -166,24 +232,18 @@ If a field cannot be determined, use null. Confidence should reflect your certai
 
     const aiResult = await response.json();
     const content = aiResult.choices?.[0]?.message?.content || '';
-    
-    console.log('[receipt-ocr] AI response received, parsing...');
 
     // Parse the JSON response
     let extracted: ExtractionResult;
     try {
-      // Try to extract JSON from the response (handle markdown wrapping)
       let jsonStr = content;
       const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
       if (jsonMatch) {
         jsonStr = jsonMatch[1].trim();
       }
       extracted = JSON.parse(jsonStr);
-    } catch (parseError) {
-      console.error('[receipt-ocr] Failed to parse AI response:', parseError);
-      console.log('[receipt-ocr] Raw content:', content);
-      
-      // Return partial result with raw text
+    } catch {
+      console.error('[receipt-ocr] Failed to parse AI response');
       extracted = {
         vendor_name: null,
         receipt_date: null,
@@ -197,12 +257,8 @@ If a field cannot be determined, use null. Confidence should reflect your certai
       };
     }
 
-    // Update the receipt record in the database if receiptId is provided
+    // Update the receipt record (ownership already verified)
     if (receiptId && projectId) {
-      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-      const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
       const { error: updateError } = await supabase
         .from('receipts')
         .update({
@@ -218,27 +274,18 @@ If a field cannot be determined, use null. Confidence should reflect your certai
           ocr_raw_text: extracted.raw_text,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', receiptId);
+        .eq('id', receiptId)
+        .eq('project_id', projectId); // Double-check project ownership
 
       if (updateError) {
         console.error('[receipt-ocr] Failed to update receipt:', updateError);
-      } else {
-        console.log('[receipt-ocr] Receipt record updated successfully');
       }
     }
 
-    console.log('[receipt-ocr] Extraction complete:', {
-      vendor: extracted.vendor_name,
-      total: extracted.total_amount,
-      items: extracted.line_items?.length || 0,
-      confidence: extracted.confidence
-    });
+    console.log('[receipt-ocr] Extraction complete');
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        data: extracted 
-      }),
+      JSON.stringify({ success: true, data: extracted }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
