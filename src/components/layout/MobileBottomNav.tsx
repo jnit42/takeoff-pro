@@ -40,33 +40,32 @@ export function MobileBottomNav({ onMagicPress, showMagicButton = false }: Mobil
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-md border-t border-border safe-area-inset-bottom">
       <div className="flex items-center justify-around h-16 max-w-lg mx-auto relative">
-        {/* Left nav items */}
+        {/* Home */}
         <NavButton 
           item={NAV_ITEMS[0]} 
           isActive={NAV_ITEMS[0].id === activeId}
           onClick={() => navigate(NAV_ITEMS[0].path)}
         />
         
-        {/* Center: Magic Button (only on project pages) or Library */}
-        {isProjectPage || showMagicButton ? (
+        {/* Library - always visible */}
+        <NavButton 
+          item={NAV_ITEMS[1]} 
+          isActive={NAV_ITEMS[1].id === activeId}
+          onClick={() => navigate(NAV_ITEMS[1].path)}
+        />
+        
+        {/* Center: Magic Button (only on project pages) */}
+        {(isProjectPage || showMagicButton) && (
           <button
             onClick={onMagicPress}
-            className="relative -mt-6 flex items-center justify-center w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 active:scale-95 transition-transform"
+            className="absolute left-1/2 -translate-x-1/2 -top-5 flex items-center justify-center w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 active:scale-95 transition-transform"
           >
             <MessageSquarePlus className="h-6 w-6" />
             <span className="sr-only">Ask AI</span>
-            {/* Pulse animation */}
-            <span className="absolute inset-0 rounded-full bg-primary animate-ping opacity-20" />
           </button>
-        ) : (
-          <NavButton 
-            item={NAV_ITEMS[1]} 
-            isActive={NAV_ITEMS[1].id === activeId}
-            onClick={() => navigate(NAV_ITEMS[1].path)}
-          />
         )}
         
-        {/* Right nav item */}
+        {/* Settings */}
         <NavButton 
           item={NAV_ITEMS[2]} 
           isActive={NAV_ITEMS[2].id === activeId}
