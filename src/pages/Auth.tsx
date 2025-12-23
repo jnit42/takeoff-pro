@@ -94,7 +94,7 @@ export default function Auth() {
         } else {
           toast({
             title: 'Account created',
-            description: 'Welcome to Takeoff + SubPay!',
+            description: 'Welcome to Scope to Pay!',
           });
         }
       }
@@ -114,18 +114,18 @@ export default function Auth() {
       {/* Left side - Branding */}
       <div className="hidden lg:flex lg:w-1/2 bg-primary p-12 flex-col justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent">
-            <HardHat className="h-7 w-7 text-accent-foreground" />
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary-foreground/10 backdrop-blur">
+            <HardHat className="h-7 w-7 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="font-bold text-2xl text-primary-foreground">Takeoff</h1>
-            <p className="text-sm text-primary-foreground/70">+ SubPay</p>
+            <h1 className="font-bold text-2xl text-primary-foreground">Scope to Pay</h1>
+            <p className="text-sm text-primary-foreground/70">Construction Estimating</p>
           </div>
         </div>
 
         <div className="space-y-6">
           <h2 className="text-4xl font-bold text-primary-foreground leading-tight">
-            Construction estimating,<br />
+            From scope to payment,<br />
             simplified.
           </h2>
           <p className="text-lg text-primary-foreground/80 max-w-md">
@@ -134,18 +134,18 @@ export default function Auth() {
           </p>
           <div className="grid grid-cols-2 gap-4 pt-4">
             <div className="p-4 rounded-xl bg-primary-foreground/10 backdrop-blur">
-              <p className="text-3xl font-bold text-accent">30+</p>
+              <p className="text-3xl font-bold text-primary-foreground">30+</p>
               <p className="text-sm text-primary-foreground/70">Labor tasks</p>
             </div>
             <div className="p-4 rounded-xl bg-primary-foreground/10 backdrop-blur">
-              <p className="text-3xl font-bold text-accent">5</p>
+              <p className="text-3xl font-bold text-primary-foreground">5</p>
               <p className="text-sm text-primary-foreground/70">Project templates</p>
             </div>
           </div>
         </div>
 
         <p className="text-sm text-primary-foreground/50">
-          Built for Rhode Island & New England contractors
+          Built for contractors
         </p>
       </div>
 
@@ -158,8 +158,8 @@ export default function Auth() {
               <HardHat className="h-7 w-7 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="font-bold text-2xl">Takeoff</h1>
-              <p className="text-sm text-muted-foreground">+ SubPay</p>
+              <h1 className="font-bold text-2xl">Scope to Pay</h1>
+              <p className="text-sm text-muted-foreground">Construction Estimating</p>
             </div>
           </div>
 
@@ -170,7 +170,7 @@ export default function Auth() {
             <p className="text-muted-foreground mt-1">
               {isLogin
                 ? 'Sign in to access your projects'
-                : 'Get started with Takeoff + SubPay'}
+                : 'Get started with Scope to Pay'}
             </p>
           </div>
 
@@ -235,7 +235,6 @@ export default function Auth() {
               type="submit"
               size="lg"
               className="w-full"
-              variant="accent"
               disabled={loading}
             >
               {loading ? (
