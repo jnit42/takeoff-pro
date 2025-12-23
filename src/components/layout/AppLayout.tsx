@@ -3,13 +3,14 @@ import { useLocation } from 'react-router-dom';
 import { AppSidebar } from './AppSidebar';
 import { MobileBottomNav } from './MobileBottomNav';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { Menu, Send, Mic, Paperclip, MapPin } from 'lucide-react';
+import { Menu, Send, Mic, Sparkles, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { AIProcessingOverlay } from '@/components/takeoff/AIProcessingOverlay';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -56,7 +57,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         });
 
         toast({
-          title: 'Estimate updated!',
+          title: 'Estimate updated',
           description: data.reasoning || `Added ${data.actions.length} items`,
         });
 
@@ -81,8 +82,8 @@ export function AppLayout({ children }: AppLayoutProps) {
         {/* AI Processing Overlay */}
         <AIProcessingOverlay isVisible={isAIProcessing} />
         
-        {/* Mobile header with hamburger */}
-        <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4">
+        {/* Mobile header */}
+        <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b bg-background/95 backdrop-blur-md px-4">
           <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="shrink-0">
@@ -90,12 +91,15 @@ export function AppLayout({ children }: AppLayoutProps) {
                 <span className="sr-only">Toggle menu</span>
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="p-0 w-64">
+            <SheetContent side="left" className="p-0 w-72 border-r-0">
               <AppSidebar onNavigate={() => setSidebarOpen(false)} />
             </SheetContent>
           </Sheet>
           <div className="flex items-center gap-2">
-            <span className="font-semibold">Takeoff + SubPay</span>
+            <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center">
+              <Sparkles className="h-4 w-4 text-primary-foreground" />
+            </div>
+            <span className="font-semibold text-base">Scope to Pay</span>
           </div>
         </header>
         
@@ -103,15 +107,15 @@ export function AppLayout({ children }: AppLayoutProps) {
           {children}
         </main>
         
-        {/* Bottom Navigation with Magic Button */}
+        {/* Bottom Navigation */}
         <MobileBottomNav 
           onMagicPress={() => setMagicInputOpen(true)}
           showMagicButton={!!projectId}
         />
         
-        {/* Handoff-style Magic Input Sheet */}
+        {/* AI Input Sheet */}
         {projectId && (
-          <HandoffInputSheet
+          <AIInputSheet
             open={magicInputOpen}
             onOpenChange={setMagicInputOpen}
             onSubmit={handleAISubmit}
@@ -134,8 +138,8 @@ export function AppLayout({ children }: AppLayoutProps) {
   );
 }
 
-// Handoff-style input sheet with location badge
-function HandoffInputSheet({ 
+// Polished AI Input Sheet
+function AIInputSheet({ 
   open, 
   onOpenChange, 
   onSubmit, 
@@ -155,86 +159,101 @@ function HandoffInputSheet({
   };
 
   const quickPrompts = [
-    "5x8 bathroom, mid-range",
-    "Frame a 15x20 basement room",
-    "10x12 bedroom with closet",
-    "Kitchen demo and remodel",
+    "5x8 bathroom remodel",
+    "Frame 15x20 room",
+    "10x12 bedroom",
+    "Kitchen demo",
   ];
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="rounded-t-3xl border-t border-primary/30 bg-background">
-        <div className="pt-3 pb-6 space-y-4">
-          {/* Handoff-style input bar */}
-          <div className="rounded-xl border-2 border-primary/50 bg-background p-2">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-sm text-muted-foreground">Use AI</span>
-            </div>
-            
-            <div className="relative">
-              <input
-                value={textInput}
-                onChange={(e) => setTextInput(e.target.value)}
-                placeholder="Describe what you need to estimate..."
-                className="w-full h-12 px-4 pr-24 text-base bg-muted/30 rounded-lg border-0 focus:outline-none focus:ring-0"
-                onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                disabled={isProcessing}
-                autoFocus
-              />
-              
-              {/* Action buttons */}
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-8 text-muted-foreground"
-                  disabled={isProcessing}
-                >
-                  <Paperclip className="h-4 w-4" />
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-8 text-muted-foreground"
-                  disabled={isProcessing}
-                >
-                  <Mic className="h-4 w-4" />
-                </Button>
-                <Button
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={handleSubmit}
-                  disabled={!textInput.trim() || isProcessing}
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
+      <SheetContent 
+        side="bottom" 
+        className="rounded-t-2xl border-t border-border/50 bg-card p-0 max-h-[85vh]"
+      >
+        <div className="p-5 space-y-5">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Sparkles className="h-4 w-4 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-sm">AI Estimator</h3>
+                <p className="text-xs text-muted-foreground">Describe your project</p>
               </div>
             </div>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-8 w-8 rounded-full"
+              onClick={() => onOpenChange(false)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          
+          {/* Input Area */}
+          <div className="relative">
+            <textarea
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value)}
+              placeholder="What do you need to estimate?"
+              className={cn(
+                "w-full min-h-[100px] p-4 pr-12 text-base rounded-xl resize-none",
+                "bg-muted/50 border-0 placeholder:text-muted-foreground/60",
+                "focus:outline-none focus:ring-2 focus:ring-primary/20 focus:bg-background",
+                "transition-all duration-200"
+              )}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmit();
+                }
+              }}
+              disabled={isProcessing}
+              autoFocus
+            />
             
-            {/* Location badge */}
-            <div className="flex items-center gap-2 mt-2">
-              <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
-                <MapPin className="h-3 w-3" />
-                Set Location
+            {/* Action Buttons */}
+            <div className="absolute right-3 bottom-3 flex items-center gap-1">
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                disabled={isProcessing}
+              >
+                <Mic className="h-4 w-4" />
+              </Button>
+              <Button
+                size="icon"
+                className="h-8 w-8 rounded-lg"
+                onClick={handleSubmit}
+                disabled={!textInput.trim() || isProcessing}
+              >
+                <Send className="h-4 w-4" />
               </Button>
             </div>
           </div>
 
           {/* Quick Prompts */}
           <div className="space-y-2">
-            <p className="text-xs text-muted-foreground text-center">Try one of these:</p>
-            <div className="flex flex-wrap gap-2 justify-center">
+            <p className="text-xs text-muted-foreground font-medium">Quick estimates</p>
+            <div className="flex flex-wrap gap-2">
               {quickPrompts.map((prompt) => (
-                <Button
+                <button
                   key={prompt}
-                  variant="outline"
-                  size="sm"
-                  className="text-xs bg-muted/20"
                   onClick={() => setTextInput(prompt)}
                   disabled={isProcessing}
+                  className={cn(
+                    "px-3 py-1.5 text-sm rounded-full",
+                    "bg-muted hover:bg-muted/80 text-foreground",
+                    "transition-colors duration-150",
+                    "disabled:opacity-50 disabled:pointer-events-none"
+                  )}
                 >
                   {prompt}
-                </Button>
+                </button>
               ))}
             </div>
           </div>
