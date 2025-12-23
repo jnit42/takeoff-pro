@@ -121,6 +121,7 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
   const isMobile = useIsMobile();
   // Auto-expand all categories on mobile for better UX
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [hasInitializedExpansion, setHasInitializedExpansion] = useState(false);
   const [showDrafts, setShowDrafts] = useState(true);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [priceResults, setPriceResults] = useState<Record<string, PriceResult[]>>({});
@@ -201,6 +202,15 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
       setItemPriceStatus(prev => ({ ...prev, ...newStatus }));
     }
   }, [initialPrices, items]);
+
+  // Auto-expand all categories on mobile for better UX
+  useEffect(() => {
+    if (isMobile && !hasInitializedExpansion && items.length > 0) {
+      const allCategories = new Set(items.map(item => item.category));
+      setExpandedCategories(allCategories);
+      setHasInitializedExpansion(true);
+    }
+  }, [isMobile, items, hasInitializedExpansion]);
 
   // Single item price refresh (triggers scrape)
   const refreshSinglePrice = async (item: TakeoffItem) => {
@@ -720,7 +730,7 @@ export function TakeoffBuilder({ projectId, project }: TakeoffBuilderProps) {
         // Execute actions through command executor
         const { data: execData, error: execError } = await supabase.functions.invoke('ai-command-parse', {
           body: {
-            command: input,
+            message: input,
             projectId,
             execute: true,
             proposedActions: data.actions,
